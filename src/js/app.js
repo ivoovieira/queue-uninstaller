@@ -63,6 +63,7 @@ let currentFilter = 'all';
 let currentSort = { column: 'name', asc: true };
 let currentLeftovers = null;
 let currentLeftoverApp = null;
+let currentTab = 'programs';
 
 // Elementos da UI
 const appsTable = document.getElementById('appsTable');
@@ -190,7 +191,7 @@ function setupEventListeners() {
     });
 
     // Botões de Ação
-    document.getElementById('btnRefresh').addEventListener('click', loadApps);
+    document.getElementById('btnRefresh').addEventListener('click', () => refreshCurrentInventory());
 
     // Abas do Ribbon
     const tabPrograms = document.getElementById('tabPrograms');
@@ -199,12 +200,14 @@ function setupEventListeners() {
     tabPrograms.addEventListener('click', () => {
         tabPrograms.classList.add('active');
         tabWindowsApps.classList.remove('active');
+        currentTab = 'programs';
         loadApps();
     });
 
     tabWindowsApps.addEventListener('click', async () => {
         tabWindowsApps.classList.add('active');
         tabPrograms.classList.remove('active');
+        currentTab = 'windows-apps';
         loadWindowsApps();
     });
 
@@ -287,20 +290,53 @@ function setupEventListeners() {
     btnCloseBatchModal.addEventListener('click', () => {
         batchModal.classList.add('hidden');
         deselectAll();
-        loadApps();
+        refreshCurrentInventory();
     });
 
     // Modal de Sobras
     document.getElementById('btnCloseLeftoverModal').addEventListener('click', () => {
         leftoverModal.classList.add('hidden');
+        refreshCurrentInventory();
     });
     document.getElementById('btnCancelLeftover').addEventListener('click', () => {
         leftoverModal.classList.add('hidden');
+        refreshCurrentInventory();
     });
     btnCleanSelectedLeftovers.addEventListener('click', executeLeftoverClean);
 }
 
+function refreshCurrentInventory() {
+    if (currentTab === 'windows-apps') {
+        return loadWindowsApps();
+    } else {
+        return loadApps();
+    }
+}
+
+function updateFooterStats() {
+    const isWindowsApps = currentTab === 'windows-apps';
+    const typeLabel = isWindowsApps ? 'app da Store' : 'programa';
+    const pluralLabel = isWindowsApps ? 'apps da Store' : 'programas';
+
+    const totalCount = allApps.length;
+    const filteredCount = filteredApps.length;
+
+    if (filteredCount === totalCount) {
+        statTotalApps.textContent = `${totalCount} ${totalCount === 1 ? typeLabel : pluralLabel}`;
+    } else {
+        statTotalApps.textContent = `${filteredCount} de ${totalCount} ${pluralLabel}`;
+    }
+
+    const totalKb = allApps.reduce((acc, app) => acc + (app.EstimatedSizeKb || 0), 0);
+    if (totalKb > 0) {
+        statTotalSize.textContent = formatSize(totalKb * 1024);
+    } else {
+        statTotalSize.textContent = isWindowsApps ? '--' : '0 MB';
+    }
+}
+
 async function loadWindowsApps() {
+    currentTab = 'windows-apps';
     loadingState.classList.remove('hidden');
     appsTable.classList.add('hidden');
     emptyState.classList.add('hidden');
@@ -308,8 +344,6 @@ async function loadWindowsApps() {
 
     try {
         allApps = await window.api.getWindowsApps();
-        statTotalApps.textContent = `${allApps.length} apps da Store`;
-        statTotalSize.textContent = '--';
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
         applyFiltersAndRender();
@@ -325,21 +359,16 @@ async function loadWindowsApps() {
 
 // Carregar inventário de programas
 async function loadApps(retryCount = 0) {
+    currentTab = 'programs';
     loadingState.classList.remove('hidden');
     appsTable.classList.add('hidden');
     emptyState.classList.add('hidden');
-    statTotalApps.textContent = 'Examinando...';
+    statTotalApps.textContent = 'Examinando programas...';
 
     try {
         allApps = await window.api.getInstalledApps();
-        
-        statTotalApps.textContent = `${allApps.length} programas`;
-        const totalKb = allApps.reduce((acc, app) => acc + (app.EstimatedSizeKb || 0), 0);
-        statTotalSize.textContent = formatSize(totalKb * 1024);
-
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
-
         applyFiltersAndRender();
     } catch (err) {
         if (retryCount < 2) {
@@ -407,6 +436,7 @@ function applyFiltersAndRender() {
 
     renderTable();
     updateBatchBar();
+    updateFooterStats();
 }
 
 function renderTable() {
@@ -459,12 +489,9 @@ function renderTable() {
             <td><span class="badge-arch ${archBadge}">${escapeHtml(app.Architecture || '64-bit')}</span></td>
             <td>${dateFormatted}</td>
             <td>${escapeHtml(app.Publisher || 'Não informado')}${webSiteHtml}</td>
-            <td>
+            <td class="text-center">
                 <div class="row-actions">
-                    <button class="btn-icon-action" data-action="scan" data-id="${escapeHtml(app.Id)}" title="Varrer sobras no Registro e Disco">
-                        🔍 Sobras
-                    </button>
-                    <button class="btn-icon-action danger" data-action="uninstall" data-id="${escapeHtml(app.Id)}" title="Desinstalar este programa">
+                    <button class="btn-icon-action danger" data-action="uninstall" data-id="${escapeHtml(app.Id)}" title="Desinstalar este aplicativo">
                         🗑️ Desinstalar
                     </button>
                 </div>
@@ -485,13 +512,7 @@ function renderTable() {
             toggleAppSelection(app.Id, newChecked);
         });
 
-        // Ações individuais
-        const btnScan = tr.querySelector('[data-action="scan"]');
-        btnScan.addEventListener('click', (e) => {
-            e.stopPropagation();
-            inspectLeftovers(app);
-        });
-
+        // Ação individual de desinstalação
         const btnUnin = tr.querySelector('[data-action="uninstall"]');
         btnUnin.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -550,6 +571,7 @@ function invertSelection() {
     });
     renderTable();
     updateBatchBar();
+    updateFooterStats();
 }
 
 function updateBatchBar() {
@@ -695,6 +717,11 @@ async function singleUninstall(app) {
 
     showToast(`Iniciando desinstalação de ${app.DisplayName}...`, 'info');
     const res = await window.api.runSingleUninstall(app, { silent: false });
+
+    // Remove imediatamente da lista em memória para refletir a nova contagem e tamanho no rodapé
+    allApps = allApps.filter(a => a.Id !== app.Id);
+    selectedAppIds.delete(app.Id);
+    applyFiltersAndRender();
 
     showToast(`Desinstalador finalizado. Varrendo sobras...`, 'info');
     inspectLeftovers(app);

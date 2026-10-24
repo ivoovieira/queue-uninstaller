@@ -99,6 +99,23 @@ $appList = foreach ($app in $rawApps) {
             $folderSize = (Get-ChildItem -Path $app.InstallLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
             if ($folderSize) { $sizeKb = [int64]($folderSize / 1024) }
         } catch {}
+    } else {
+        # Fallback inteligente: tentar inferir pasta pelo executável de DisplayIcon ou UninstallString
+        $candidateExe = ""
+        if ($app.DisplayIcon) { $candidateExe = ($app.DisplayIcon -split ',')[0].Trim('"').Trim() }
+        if (-not $candidateExe -and $app.UninstallString) { $candidateExe = ($app.UninstallString -split ' ')[0].Trim('"').Trim() }
+        if ($candidateExe -and (Test-Path $candidateExe) -and ($candidateExe -match '\.exe$')) {
+            $parentDir = Split-Path -Path $candidateExe -Parent
+            if ($parentDir -and (Test-Path $parentDir)) {
+                $normParent = $parentDir.ToLower()
+                if ($normParent -notmatch '^c:\\windows' -and $normParent -ne 'c:\program files' -and $normParent -ne 'c:\program files (x86)' -and $normParent -ne "$env:LOCALAPPDATA\programs".ToLower()) {
+                    try {
+                        $folderSize = (Get-ChildItem -Path $parentDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                        if ($folderSize) { $sizeKb = [int64]($folderSize / 1024) }
+                    } catch {}
+                }
+            }
+        }
     }
 
     # Arquitetura (32-bit vs 64-bit)

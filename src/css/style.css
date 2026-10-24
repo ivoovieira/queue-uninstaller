@@ -49,9 +49,18 @@ body {
     display: flex;
     align-items: center;
     padding: 8px 16px;
+    padding-right: 145px;
     background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
     border-bottom: 1px solid var(--border-color);
     gap: 16px;
+    -webkit-app-region: drag;
+}
+
+.ribbon-bar button,
+.ribbon-bar a,
+.ribbon-bar input,
+.ribbon-branding {
+    -webkit-app-region: no-drag;
 }
 
 .ribbon-branding {
@@ -420,7 +429,9 @@ body {
 .row-actions {
     display: flex;
     gap: 6px;
-    justify-content: flex-end;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
 }
 
 .btn-icon-action {

@@ -276,6 +276,12 @@ function createWindow() {
         minHeight: 650,
         backgroundColor: '#0f172a',
         icon: path.join(__dirname, 'icon.ico'),
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+            color: '#1e293b',
+            symbolColor: '#f8fafc',
+            height: 48
+        },
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -283,7 +289,7 @@ function createWindow() {
             sandbox: false
         },
         show: false,
-        title: "Queu Uninstaller - Desinstalação em Fila & Limpeza Profunda"
+        title: "Queu Uninstaller"
     });
 
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
