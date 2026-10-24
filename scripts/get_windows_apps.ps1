@@ -11,10 +11,17 @@ $appList = foreach ($a in $rawApps) {
         continue
     }
 
-    # Nome amigável
-    $friendlyName = $a.Name
-    if ($friendlyName -match '([^\.]+)$') {
-        $friendlyName = $Matches[1]
+    # Nome amigável robusto: ignora sufixos de versão numérica (ex: .1.0, .2) e códigos de idioma
+    $rawName = [string]$a.Name
+    $clean = $rawName -replace '(?:\.\d+)+$', ''
+    $clean = $clean -replace '\.[a-zA-Z]{2}(-[a-zA-Z]{2,4})?$', ''
+    $clean = $clean -replace '(?:\.\d+)+$', ''
+    if ($clean -match '^(?:MicrosoftCorporationII|Microsoft|Windows|SpotifyAB|AppleInc)\.(.+)$') {
+        $clean = $Matches[1]
+    }
+    $friendlyName = ($clean -replace '[\._]', ' ').Trim()
+    if (-not $friendlyName -or $friendlyName -match '^\d+$') {
+        $friendlyName = ($rawName -replace '(?:\.\d+)+$', '')
     }
 
     # Tamanho da pasta

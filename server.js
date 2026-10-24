@@ -173,7 +173,7 @@ const server = http.createServer(async (req, res) => {
                     sendSSE({ type: 'app-scanning', index: i, app: currentApp });
                     leftoverRes = await scanLeftovers(currentApp, options.scanLevel || 'Moderate');
 
-                    if (options.autoCleanLeftovers && (leftoverRes.TotalRegistryCount > 0 || leftoverRes.TotalFileSystemCount > 0)) {
+                    if (options.autoCleanLeftovers && (leftoverRes.TotalRegistryCount > 0 || leftoverRes.TotalFileSystemCount > 0 || (leftoverRes.TotalFirewallCount && leftoverRes.TotalFirewallCount > 0))) {
                         sendSSE({ type: 'app-cleaning', index: i, app: currentApp });
                         cleanRes = await cleanLeftovers(leftoverRes);
                     }

@@ -20,7 +20,7 @@ param(
 $forbiddenFolders = @(
     "C:\", "C:\Windows", "C:\Windows\System32", "C:\Program Files", "C:\Program Files (x86)",
     "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
-    "$env:TEMP", "C:\Users\Public"
+    "$env:LOCALAPPDATA\Programs", "$env:TEMP", "C:\Users\Public"
 ) | ForEach-Object { $_.TrimEnd('\').ToLower() }
 
 $forbiddenKeys = @(
@@ -30,39 +30,64 @@ $forbiddenKeys = @(
     "HKEY_LOCAL_MACHINE\Software\Wow6432Node", "HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft",
     "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services",
     "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum",
-    "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control"
+    "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control",
+    "HKEY_CURRENT_USER\Software\Classes",
+    "HKEY_LOCAL_MACHINE\Software\Classes"
 ) | ForEach-Object { $_.ToLower() }
 
-$genericPublishers = @("microsoft", "google", "apple", "adobe", "oracle", "intel", "amd", "nvidia")
+$genericPublishers = @(
+    "microsoft", "google", "apple", "adobe", "oracle", "intel", "amd", "nvidia",
+    "microsoft corporation", "google llc", "corporation", "ltd", "inc"
+)
 
+# Termos de Busca
 $cleanName = ($DisplayName -replace '[^a-zA-Z0-9_\-\s]', '').Trim()
 $searchTerms = [System.Collections.Generic.List[string]]::new()
+$publisherTerms = [System.Collections.Generic.List[string]]::new()
 
-if ($cleanName.Length -ge 3) {
+if ($cleanName.Length -ge 2) {
     $baseName = ($cleanName -replace '\b\d+(\.\d+)*\b', '').Trim()
-    if ($baseName.Length -ge 3 -and -not ($searchTerms -contains $baseName)) { $searchTerms.Add($baseName) }
+    if ($baseName.Length -ge 2 -and -not ($searchTerms -contains $baseName)) { $searchTerms.Add($baseName) }
     if (-not ($searchTerms -contains $cleanName)) { $searchTerms.Add($cleanName) }
+    
+    $compressedName = ($cleanName -replace '\s+', '').Trim()
+    if ($compressedName.Length -ge 3 -and -not ($searchTerms -contains $compressedName)) {
+        $searchTerms.Add($compressedName)
+    }
 }
 
-if ($RegistryId -and $RegistryId.Trim().Length -ge 4) {
-    $searchTerms.Add($RegistryId.Trim())
+if ($RegistryId -and $RegistryId.Trim().Length -ge 3) {
+    $cleanRegId = $RegistryId.Trim()
+    if (-not ($searchTerms -contains $cleanRegId)) {
+        $searchTerms.Add($cleanRegId)
+    }
 }
 
-$pubTerm = ($Publisher -replace '[^a-zA-Z0-9_\-\s]', '').Trim()
-if ($pubTerm.Length -ge 3 -and -not ($genericPublishers -contains $pubTerm.ToLower())) {
-    if (-not ($searchTerms -contains $pubTerm)) {
-        $searchTerms.Add($pubTerm)
+# Tratamento do Fabricante (Publisher) para busca cruzada (ex: famatech para Advanced IP Scanner)
+if ($Publisher) {
+    $pubTerm = ($Publisher -replace '[^a-zA-Z0-9_\-\s]', '').Trim()
+    if ($pubTerm.Length -ge 3 -and -not ($genericPublishers -contains $pubTerm.ToLower())) {
+        if (-not $publisherTerms.Contains($pubTerm)) {
+            $publisherTerms.Add($pubTerm)
+        }
+        $pubFirst = ($pubTerm.Split(' ')[0]).Trim()
+        if ($pubFirst.Length -ge 3 -and -not ($genericPublishers -contains $pubFirst.ToLower()) -and -not $publisherTerms.Contains($pubFirst)) {
+            $publisherTerms.Add($pubFirst)
+        }
     }
 }
 
 $foundRegistry = [System.Collections.Generic.List[object]]::new()
 $foundFileSystem = [System.Collections.Generic.List[object]]::new()
+$foundFirewall = [System.Collections.Generic.List[object]]::new()
 
 # 1. Checar InstallLocation diretamente
+$normInstallLoc = ""
 if ($InstallLocation) {
     $normLocation = $InstallLocation.Trim('"').Trim()
     if (Test-Path $normLocation) {
         $normLocLower = $normLocation.TrimEnd('\').ToLower()
+        $normInstallLoc = $normLocLower
         if (-not ($forbiddenFolders -contains $normLocLower)) {
             try {
                 $fCount = (Get-ChildItem -Path $normLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
@@ -70,7 +95,7 @@ if ($InstallLocation) {
                 $foundFileSystem.Add([PSCustomObject]@{
                     Type = "Folder"
                     Path = $normLocation
-                    Description = "Diretório de Instalação original"
+                    Description = "Diretório de Instalação original (arquivos remanescentes)"
                     ItemsCount = $fCount
                     SizeBytes = [int64]$fSize
                     Selected = $true
@@ -80,8 +105,9 @@ if ($InstallLocation) {
     }
 }
 
-# 2. Varrer Pastas Comuns no Disco
+# 2. Varrer Pastas Comuns no Disco (incluindo explicitamente LOCALAPPDATA\Programs)
 $foldersToScan = @(
+    "$env:LOCALAPPDATA\Programs",
     "C:\Program Files",
     "C:\Program Files (x86)",
     "C:\ProgramData",
@@ -92,6 +118,7 @@ $foldersToScan = @(
 foreach ($root in $foldersToScan) {
     if (-not (Test-Path $root)) { continue }
     
+    # 2.1 Busca direta por termo
     foreach ($term in $searchTerms) {
         $candidate = Join-Path $root $term
         if ((Test-Path $candidate) -and (-not ($foundFileSystem.Path -contains $candidate))) {
@@ -112,9 +139,86 @@ foreach ($root in $foldersToScan) {
             }
         }
     }
+
+    # 2.2 Busca cruzada por Fabricante (ex: AppData\famatech\advanced_ip_scanner)
+    foreach ($pub in $publisherTerms) {
+        $pubFolder = Join-Path $root $pub
+        if (Test-Path $pubFolder) {
+            $normPub = $pubFolder.TrimEnd('\').ToLower()
+            if (-not ($forbiddenFolders -contains $normPub)) {
+                $subDirs = Get-ChildItem -Path $pubFolder -Directory -ErrorAction SilentlyContinue
+                foreach ($sub in $subDirs) {
+                    $isMatch = $false
+                    foreach ($term in $searchTerms) {
+                        if ($sub.Name.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                            $isMatch = $true
+                            break
+                        }
+                    }
+                    if ($isMatch -and (-not ($foundFileSystem.Path -contains $sub.FullName))) {
+                        try {
+                            $cCount = (Get-ChildItem -Path $sub.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                            $cSize = (Get-ChildItem -Path $sub.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                            $foundFileSystem.Add([PSCustomObject]@{
+                                Type = "Folder"
+                                Path = $sub.FullName
+                                Description = "Subpasta de Fabricante ($pub) em $root"
+                                ItemsCount = $cCount
+                                SizeBytes = [int64]$cSize
+                                Selected = $true
+                            })
+                        } catch {}
+                    }
+                }
+            }
+        }
+    }
 }
 
-# 3. Varrer atalhos no Desktop e Menu Iniciar
+# 3. Limpeza de Temporários de Instaladores Modernos (SquirrelTemp)
+$squirrelTemp = "$env:LOCALAPPDATA\SquirrelTemp"
+if (Test-Path $squirrelTemp) {
+    $sqFiles = Get-ChildItem -Path $squirrelTemp -ErrorAction SilentlyContinue
+    foreach ($sq in $sqFiles) {
+        foreach ($term in $searchTerms) {
+            if ($sq.Name.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                if (-not ($foundFileSystem.Path -contains $sq.FullName)) {
+                    $foundFileSystem.Add([PSCustomObject]@{
+                        Type = if ($sq.PSIsContainer) { "Folder" } else { "File" }
+                        Path = $sq.FullName
+                        Description = "Arquivo temporário residual de instalação Squirrel"
+                        ItemsCount = 1
+                        SizeBytes = if ($sq.PSIsContainer) { 0 } else { $sq.Length }
+                        Selected = $true
+                    })
+                }
+                break
+            }
+        }
+    }
+}
+
+# 4. Varrer Pacotes de Loja / AppData\Local\Packages
+$packagesDir = "$env:LOCALAPPDATA\Packages"
+if (Test-Path $packagesDir) {
+    foreach ($term in $searchTerms) {
+        $matchedPkgs = Get-ChildItem -Path $packagesDir -Filter "*$term*" -Directory -ErrorAction SilentlyContinue
+        foreach ($pkg in $matchedPkgs) {
+            if (-not ($foundFileSystem.Path -contains $pkg.FullName)) {
+                $foundFileSystem.Add([PSCustomObject]@{
+                    Type = "Folder"
+                    Path = $pkg.FullName
+                    Description = "Dados residuais de pacote Windows Store / AppData"
+                    ItemsCount = 1
+                    SizeBytes = 0
+                    Selected = $true
+                })
+            }
+        }
+    }
+}
+
+# 5. Varrer atalhos no Desktop e Menu Iniciar
 $shortcutDirs = @(
     "$env:USERPROFILE\Desktop",
     "C:\Users\Public\Desktop",
@@ -142,7 +246,7 @@ foreach ($dir in $shortcutDirs) {
     }
 }
 
-# 4. Varrer Chaves de Software no Registro (HKCU, HKLM, WOW6432Node)
+# 6. Varrer Chaves de Software no Registro (HKCU, HKLM, WOW6432Node)
 $regHives = @(
     "HKCU:\Software",
     "HKLM:\Software",
@@ -152,6 +256,7 @@ $regHives = @(
 foreach ($hive in $regHives) {
     if (-not (Test-Path $hive)) { continue }
     
+    # 6.1 Busca direta por termo
     foreach ($term in $searchTerms) {
         $candidateKey = Join-Path $hive $term
         if (Test-Path $candidateKey) {
@@ -174,9 +279,130 @@ foreach ($hive in $regHives) {
             }
         }
     }
+
+    # 6.2 Varredura Cruzada por Fabricante (ex: HKCU:\Software\famatech\advanced_ip_scanner)
+    foreach ($pub in $publisherTerms) {
+        $pubKey = Join-Path $hive $pub
+        if (Test-Path $pubKey) {
+            $childKeys = Get-ChildItem -Path $pubKey -ErrorAction SilentlyContinue
+            foreach ($ck in $childKeys) {
+                $isMatch = $false
+                foreach ($term in $searchTerms) {
+                    if ($ck.PSChildName.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                        $isMatch = $true
+                        break
+                    }
+                }
+                if ($isMatch) {
+                    $normReg = $ck.Name.ToLower()
+                    if (-not ($forbiddenKeys -contains $normReg)) {
+                        $foundRegistry.Add([PSCustomObject]@{
+                            Hive = $hive
+                            KeyPath = $ck.Name
+                            PSPath = $ck.PSPath
+                            ValueName = ""
+                            SubKeyCount = $ck.SubKeyCount
+                            ValueCount = $ck.ValueCount
+                            Description = "Subchave de fabricante ($pub) em $hive"
+                            Selected = $true
+                        })
+                    }
+                }
+            }
+        }
+    }
 }
 
-# 5. Varrer Serviços Órfãos no Windows (CurrentControlSet\Services)
+# 7. Protocolos de URL e Classes (HKCU:\Software\Classes e HKLM:\Software\Classes)
+$classesHives = @(
+    "HKCU:\Software\Classes",
+    "HKLM:\Software\Classes"
+)
+
+foreach ($cHive in $classesHives) {
+    if (-not (Test-Path $cHive)) { continue }
+    foreach ($term in $searchTerms) {
+        # Procurar por chaves que comecem com o termo (ex: discord-*, steam, tg)
+        $protoCandidates = Get-ChildItem -Path $cHive -Filter "$term*" -ErrorAction SilentlyContinue
+        foreach ($proto in $protoCandidates) {
+            $isProtocolOrMatch = $false
+            $protoProps = Get-ItemProperty -Path $proto.PSPath -ErrorAction SilentlyContinue
+            if ($protoProps.'URL Protocol' -ne $null) {
+                $isProtocolOrMatch = $true
+            } elseif ($proto.PSChildName -match "^$term(-|_|\.|\$)") {
+                $isProtocolOrMatch = $true
+            }
+
+            if ($isProtocolOrMatch) {
+                $normReg = $proto.Name.ToLower()
+                if (-not ($forbiddenKeys -contains $normReg)) {
+                    $foundRegistry.Add([PSCustomObject]@{
+                        Hive = $cHive
+                        KeyPath = $proto.Name
+                        PSPath = $proto.PSPath
+                        ValueName = ""
+                        SubKeyCount = $proto.SubKeyCount
+                        ValueCount = $proto.ValueCount
+                        Description = "Manipulador de Protocolo / Classe ($($proto.PSChildName))"
+                        Selected = $true
+                    })
+                }
+            }
+        }
+
+        # Checar Classes\Applications\<term>.exe
+        $appClassKey = Join-Path "$cHive\Applications" "$term.exe"
+        if (Test-Path $appClassKey) {
+            $acObj = Get-Item -Path $appClassKey -ErrorAction SilentlyContinue
+            if ($acObj) {
+                $foundRegistry.Add([PSCustomObject]@{
+                    Hive = $cHive
+                    KeyPath = $acObj.Name
+                    PSPath = $appClassKey
+                    ValueName = ""
+                    SubKeyCount = $acObj.SubKeyCount
+                    ValueCount = $acObj.ValueCount
+                    Description = "Associação de Aplicativo em Classes\Applications"
+                    Selected = $true
+                })
+            }
+        }
+    }
+}
+
+# 8. App Paths (HKLM e HKCU CurrentVersion\App Paths)
+$appPathsHives = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths",
+    "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\App Paths"
+)
+
+foreach ($apHive in $appPathsHives) {
+    if (-not (Test-Path $apHive)) { continue }
+    foreach ($term in $searchTerms) {
+        $cands = @("$term.exe", "$term")
+        foreach ($c in $cands) {
+            $targetAp = Join-Path $apHive $c
+            if (Test-Path $targetAp) {
+                $apObj = Get-Item -Path $targetAp -ErrorAction SilentlyContinue
+                if ($apObj) {
+                    $foundRegistry.Add([PSCustomObject]@{
+                        Hive = $apHive
+                        KeyPath = $apObj.Name
+                        PSPath = $targetAp
+                        ValueName = ""
+                        SubKeyCount = $apObj.SubKeyCount
+                        ValueCount = $apObj.ValueCount
+                        Description = "Registro de Execução Rápida do Windows (App Paths)"
+                        Selected = $true
+                    })
+                }
+            }
+        }
+    }
+}
+
+# 9. Varrer Serviços Órfãos no Windows (CurrentControlSet\Services)
 $servicesPath = "HKLM:\SYSTEM\CurrentControlSet\Services"
 if (Test-Path $servicesPath) {
     foreach ($term in $searchTerms) {
@@ -199,7 +425,7 @@ if (Test-Path $servicesPath) {
     }
 }
 
-# 6. Varrer Inicialização Automática (Run / RunOnce)
+# 10. Varrer Inicialização Automática (Run / RunOnce)
 $runPaths = @(
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
@@ -234,7 +460,7 @@ foreach ($rPath in $runPaths) {
     }
 }
 
-# 7. Varrer Registros de Compatibilidade, Telemetria e Cache do Explorer
+# 11. Varrer Registros de Compatibilidade, Telemetria e Cache do Explorer
 $traceLocations = @(
     @{ Path = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"; Desc = "Registro de Compatibilidade do Windows" },
     @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"; Desc = "Histórico de Execução de Janelas do Explorer" },
@@ -274,7 +500,42 @@ foreach ($loc in $traceLocations) {
     }
 }
 
-# 8. Checar se a chave do Uninstall ainda existe
+# 12. Regras de Firewall do Windows
+try {
+    $appFilters = Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+    if ($appFilters) {
+        foreach ($af in $appFilters) {
+            $prog = [string]$af.Program
+            if (-not $prog) { continue }
+            $isMatch = $false
+
+            if ($normInstallLoc -and $prog.ToLower().StartsWith($normInstallLoc)) {
+                $isMatch = $true
+            } else {
+                foreach ($term in $searchTerms) {
+                    if ($prog.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                        $isMatch = $true
+                        break
+                    }
+                }
+            }
+
+            if ($isMatch) {
+                $ruleObj = Get-NetFirewallRule -Name $af.InstanceID -ErrorAction SilentlyContinue
+                $ruleName = if ($ruleObj) { $ruleObj.DisplayName } else { $af.InstanceID }
+                $foundFirewall.Add([PSCustomObject]@{
+                    Name = $af.InstanceID
+                    DisplayName = $ruleName
+                    Program = $prog
+                    Description = "Regra de Firewall do Windows apontando para executável residual"
+                    Selected = $true
+                })
+            }
+        }
+    }
+} catch {}
+
+# 13. Checar se a chave do Uninstall ainda existe
 $uninstallHives = @(
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -305,8 +566,10 @@ $result = [PSCustomObject]@{
     DisplayName = $DisplayName
     RegistryLeftovers = $foundRegistry
     FileSystemLeftovers = $foundFileSystem
+    FirewallRulesLeftovers = $foundFirewall
     TotalRegistryCount = $foundRegistry.Count
     TotalFileSystemCount = $foundFileSystem.Count
+    TotalFirewallCount = $foundFirewall.Count
     TotalSizeBytes = ($foundFileSystem | Measure-Object -Property SizeBytes -Sum).Sum
 }
 

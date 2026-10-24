@@ -34,8 +34,10 @@ function scanLeftovers(app, scanLevel = 'Moderate') {
                         DisplayName: app.DisplayName,
                         RegistryLeftovers: [],
                         FileSystemLeftovers: [],
+                        FirewallRulesLeftovers: [],
                         TotalRegistryCount: 0,
                         TotalFileSystemCount: 0,
+                        TotalFirewallCount: 0,
                         TotalSizeBytes: 0
                     });
                 }
@@ -47,8 +49,10 @@ function scanLeftovers(app, scanLevel = 'Moderate') {
                     DisplayName: app.DisplayName,
                     RegistryLeftovers: [],
                     FileSystemLeftovers: [],
+                    FirewallRulesLeftovers: [],
                     TotalRegistryCount: 0,
                     TotalFileSystemCount: 0,
+                    TotalFirewallCount: 0,
                     TotalSizeBytes: 0,
                     error: err.message
                 });

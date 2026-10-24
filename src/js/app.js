@@ -719,7 +719,11 @@ async function inspectLeftovers(app) {
         leftoverRegCount.textContent = result.TotalRegistryCount;
         leftoverFileCount.textContent = result.TotalFileSystemCount;
         leftoverTotalSize.textContent = formatSize(result.TotalSizeBytes || 0);
-        leftoverAppSubtitle.textContent = `Varredura concluída: ${result.TotalRegistryCount} chaves no registro e ${result.TotalFileSystemCount} pastas/atalhos encontrados.`;
+        let subtitleText = `Varredura concluída: ${result.TotalRegistryCount} chaves no registro e ${result.TotalFileSystemCount} pastas/atalhos encontrados.`;
+        if (result.TotalFirewallCount > 0) {
+            subtitleText += ` (${result.TotalFirewallCount} regras órfãs de firewall detectadas)`;
+        }
+        leftoverAppSubtitle.textContent = subtitleText;
 
         // Renderiza itens do Registro
         leftoverRegList.innerHTML = '';
@@ -793,7 +797,8 @@ async function executeLeftoverClean() {
 
     const cleanPayload = {
         RegistryLeftovers: regToClean,
-        FileSystemLeftovers: filesToClean
+        FileSystemLeftovers: filesToClean,
+        FirewallRulesLeftovers: currentLeftovers.FirewallRulesLeftovers || []
     };
 
     const res = await window.api.cleanLeftovers(cleanPayload);
