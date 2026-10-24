@@ -1,5 +1,5 @@
 param(
-    [string]$Description = "RevoClone Batch Uninstaller"
+    [string]$Description = "Queu Uninstaller"
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8

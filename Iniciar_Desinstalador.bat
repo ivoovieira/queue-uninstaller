@@ -1,9 +1,9 @@
 @echo off
-title RevoQueue Uninstaller
+title Queu Uninstaller
 cd /d "%~dp0"
 
 echo ========================================================
-echo       RevoQueue Uninstaller - Desinstalador em Fila
+echo       Queu Uninstaller - Desinstalador em Fila
 echo ========================================================
 echo.
 
@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Iniciando RevoQueue...
+echo Iniciando Queu Uninstaller...
 call npx electron .
 if %errorlevel% neq 0 (
     echo.

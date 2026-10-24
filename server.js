@@ -97,7 +97,7 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { desc } = JSON.parse(body || '{}');
-                const result = await createRestorePoint(desc || 'RevoQueue Ponto');
+                const result = await createRestorePoint(desc || 'Queu Ponto de Restauração');
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(result));
             } catch (err) {
@@ -150,7 +150,7 @@ const server = http.createServer(async (req, res) => {
                     type: 'status-update',
                     message: 'Criando ponto de restauração do sistema...'
                 });
-                await createRestorePoint(`RevoQueue Fila (${total} apps)`);
+                await createRestorePoint(`Queu Fila (${total} apps)`);
             }
 
             for (let i = 0; i < total; i++) {
@@ -213,7 +213,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`RevoQueue rodando em http://localhost:${PORT}`);
+    console.log(`Queu Uninstaller rodando em http://localhost:${PORT}`);
     
     // Tenta abrir como app nativo no Edge do Windows
     const appUrl = `http://localhost:${PORT}`;

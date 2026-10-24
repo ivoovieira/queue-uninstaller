@@ -176,7 +176,7 @@ foreach ($hive in $regHives) {
     }
 }
 
-# 5. Varrer Serviços Órfãos no Windows (CurrentControlSet\Services - Regra do Revo)
+# 5. Varrer Serviços Órfãos no Windows (CurrentControlSet\Services)
 $servicesPath = "HKLM:\SYSTEM\CurrentControlSet\Services"
 if (Test-Path $servicesPath) {
     foreach ($term in $searchTerms) {
@@ -234,7 +234,7 @@ foreach ($rPath in $runPaths) {
     }
 }
 
-# 7. Varrer Registros de Compatibilidade, Telemetria e Cache do Explorer (Estilo Revo)
+# 7. Varrer Registros de Compatibilidade, Telemetria e Cache do Explorer
 $traceLocations = @(
     @{ Path = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"; Desc = "Registro de Compatibilidade do Windows" },
     @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"; Desc = "Histórico de Execução de Janelas do Explorer" },

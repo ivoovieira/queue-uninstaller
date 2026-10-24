@@ -197,7 +197,7 @@ function setupEventListeners() {
 
     document.getElementById('btnCreateRestore').addEventListener('click', async () => {
         showToast('Criando ponto de restauração no Windows...', 'info');
-        const res = await window.api.createRestorePoint('Ponto Manual RevoQueue');
+        const res = await window.api.createRestorePoint('Ponto Manual Queu Uninstaller');
         if (res.Success) {
             showToast(res.Message, 'success');
         } else {
@@ -597,7 +597,7 @@ function setupBatchListener() {
 
 // Desinstalação individual direta
 async function singleUninstall(app) {
-    const confirm = window.confirm(`Deseja desinstalar "${app.DisplayName}" agora?\n\nApós o desinstalador, o RevoQueue fará a varredura profunda de sobras no Registro e Pastas.`);
+    const confirm = window.confirm(`Deseja desinstalar "${app.DisplayName}" agora?\n\nApós o desinstalador, o Queu Uninstaller fará a varredura profunda de sobras no Registro e Pastas.`);
     if (!confirm) return;
 
     showToast(`Iniciando desinstalação de ${app.DisplayName}...`, 'info');
@@ -745,7 +745,7 @@ async function checkAppUpdates(isManual = false) {
         } else {
             badgeUpdate.classList.add('hidden');
             if (isManual) {
-                showToast('O RevoQueue já está na versão mais recente!', 'success');
+                showToast('O Queu Uninstaller já está na versão mais recente!', 'success');
             }
         }
     } catch (e) {

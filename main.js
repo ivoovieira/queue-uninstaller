@@ -111,7 +111,7 @@ function startInternalServer() {
             req.on('end', async () => {
                 try {
                     const { desc } = JSON.parse(body || '{}');
-                    const result = await createRestorePoint(desc || 'RevoQueue Ponto');
+                    const result = await createRestorePoint(desc || 'Queu Ponto de Restauração');
                     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                     res.end(JSON.stringify(result));
                 } catch (err) {
@@ -193,7 +193,7 @@ function startInternalServer() {
     });
 
     server.listen(HTTP_PORT, () => {
-        console.log(`Servidor interno RevoQueue rodando em http://localhost:${HTTP_PORT}`);
+        console.log(`Servidor interno Queu Uninstaller rodando em http://localhost:${HTTP_PORT}`);
     });
 }
 
@@ -213,7 +213,7 @@ async function runBatchQueue(apps, options = {}) {
 
     if (options.createRestorePoint) {
         notify({ type: 'status-update', message: 'Criando ponto de restauração do sistema...' });
-        await createRestorePoint(`RevoQueue Fila (${total} apps)`);
+        await createRestorePoint(`Queu Fila (${total} apps)`);
     }
 
     for (let i = 0; i < total; i++) {
@@ -271,7 +271,7 @@ function createWindow() {
             sandbox: false
         },
         show: false,
-        title: "RevoQueue Uninstaller - Desinstalação em Fila & Limpeza Profunda"
+        title: "Queu Uninstaller - Desinstalação em Fila & Limpeza Profunda"
     });
 
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));

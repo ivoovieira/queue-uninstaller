@@ -1,14 +1,14 @@
 {
-  "name": "revoqueue-uninstaller",
+  "name": "queu-uninstaller",
   "version": "1.0.0",
-  "description": "Desinstalador de múltiplos programas em lote & varredura profunda de sobras para Windows",
+  "description": "Queu Uninstaller - Desinstalador de múltiplos programas em lote & varredura profunda de sobras para Windows",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "web": "node server.js"
   },
   "keywords": [
-    "revo",
+    "queue",
     "uninstaller",
     "batch",
     "windows",

@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-function createRestorePoint(description = 'RevoClone Batch Uninstaller') {
+function createRestorePoint(description = 'Queu Uninstaller') {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'create_restore.ps1');
 
