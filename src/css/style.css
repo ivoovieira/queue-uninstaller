@@ -126,8 +126,9 @@ body {
 }
 
 .ribbon-btn.active {
-    background: linear-gradient(180deg, rgba(37, 99, 235, 0.25) 0%, rgba(37, 99, 235, 0.1) 100%);
-    border-color: #3b82f6;
+    background: transparent;
+    border-color: transparent;
+    border-bottom: 2px solid #3b82f6;
     color: #ffffff;
 }
 
@@ -136,18 +137,19 @@ body {
 }
 
 .ribbon-btn.highlight-btn {
-    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-    color: white;
-    border-color: #ef4444;
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+    background: transparent;
+    color: var(--text-primary);
+    border-color: transparent;
+    box-shadow: none;
 }
 
 .ribbon-btn.highlight-btn:hover {
-    background: #dc2626;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--border-color);
 }
 
 .ribbon-btn.highlight-btn .r-icon {
-    color: white;
+    color: #cbd5e1;
 }
 
 .ribbon-divider {
@@ -406,13 +408,14 @@ body {
 
 .badge-arch {
     display: inline-block;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 0.72rem;
-    font-weight: 600;
+    color: #ffffff;
+    background: transparent;
+    border: none;
+    font-size: 0.82rem;
+    font-weight: 500;
 }
-.badge-64 { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
-.badge-32 { background: rgba(245, 158, 11, 0.2); color: #fde047; border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge-64 { background: transparent; color: #ffffff; border: none; }
+.badge-32 { background: transparent; color: #ffffff; border: none; }
 
 .row-actions {
     display: flex;

@@ -217,17 +217,49 @@ function setupEventListeners() {
         executeBatch();
     });
 
-    // Modal de Opções
+    // Modal de Opções com Persistência
     const optionsModal = document.getElementById('optionsModal');
+    const cfgRestorePoint = document.getElementById('cfgRestorePoint');
+    const cfgRecycleBin = document.getElementById('cfgRecycleBin');
+    const cfgKillProcesses = document.getElementById('cfgKillProcesses');
+    const cfgDeepServices = document.getElementById('cfgDeepServices');
+    const cfgAutoCheckUpdates = document.getElementById('cfgAutoCheckUpdates');
+
+    function loadSavedOptions() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('queu_options') || '{}');
+            if (saved.restorePoint !== undefined) cfgRestorePoint.checked = saved.restorePoint;
+            if (saved.recycleBin !== undefined) {
+                cfgRecycleBin.checked = saved.recycleBin;
+                if (optRecycleBin) optRecycleBin.checked = saved.recycleBin;
+            }
+            if (saved.killProcesses !== undefined) cfgKillProcesses.checked = saved.killProcesses;
+            if (saved.deepServices !== undefined) cfgDeepServices.checked = saved.deepServices;
+            if (saved.autoCheckUpdates !== undefined) cfgAutoCheckUpdates.checked = saved.autoCheckUpdates;
+        } catch (e) {}
+    }
+    loadSavedOptions();
+
     document.getElementById('btnOptionsModal').addEventListener('click', () => {
+        loadSavedOptions();
         optionsModal.classList.remove('hidden');
     });
     document.getElementById('btnCloseOptions').addEventListener('click', () => {
         optionsModal.classList.add('hidden');
     });
     document.getElementById('btnSaveOptions').addEventListener('click', () => {
+        const toSave = {
+            restorePoint: cfgRestorePoint.checked,
+            recycleBin: cfgRecycleBin.checked,
+            killProcesses: cfgKillProcesses.checked,
+            deepServices: cfgDeepServices.checked,
+            autoCheckUpdates: cfgAutoCheckUpdates.checked
+        };
+        localStorage.setItem('queu_options', JSON.stringify(toSave));
+        if (optRecycleBin) optRecycleBin.checked = toSave.recycleBin;
+        if (optRestorePoint) optRestorePoint.checked = toSave.restorePoint;
         optionsModal.classList.add('hidden');
-        showToast('Configurações salvas com sucesso!', 'success');
+        showToast('Configurações salvas e aplicadas com sucesso!', 'success');
     });
 
     btnCheckUpdate.addEventListener('click', () => {
