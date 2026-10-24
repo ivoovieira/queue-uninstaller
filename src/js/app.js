@@ -857,20 +857,21 @@ async function checkAppUpdates(isManual = false) {
 
         if (res.hasUpdate) {
             badgeUpdate.classList.remove('hidden');
+            const vText = res.remoteVersion || 'Nova versão';
             if (isManual) {
                 const confirmUpdate = window.confirm(
-                    `🚀 Nova atualização disponível no GitHub!\nVersão remota: commit ${res.remoteCommit} (atual: ${res.localCommit})\n\nDeseja baixar e aplicar a atualização agora?`
+                    `🚀 Nova atualização disponível no GitHub!\n\nVersão mais recente: ${vText}\nSua versão atual: v${res.currentVersion}\n\nDeseja baixar e aplicar a atualização agora?`
                 );
                 if (confirmUpdate) {
                     applyAppUpdate();
                 }
             } else {
-                showToast(`Nova atualização disponível (${res.remoteCommit})! Clique em "Atualizações" no topo para aplicar.`, 'info');
+                showToast(`Nova versão disponível (${vText})! Clique em "Atualizações" no topo para aplicar.`, 'info');
             }
         } else {
             badgeUpdate.classList.add('hidden');
             if (isManual) {
-                showToast('O Queu Uninstaller já está na versão mais recente!', 'success');
+                showToast(`O Queu Uninstaller já está na versão mais recente (v${res.currentVersion})!`, 'success');
             }
         }
     } catch (e) {
@@ -881,14 +882,12 @@ async function checkAppUpdates(isManual = false) {
 
 async function applyAppUpdate() {
     updateBtnText.textContent = 'Atualizando...';
-    showToast('Baixando atualização do GitHub... Aguarde.', 'info');
+    showToast('Baixando nova versão do instalador... Aguarde.', 'info');
     try {
         const res = await window.api.applyUpdate();
         if (res.success) {
-            showToast('Atualizado com sucesso! Reiniciando em instantes...', 'success');
-            setTimeout(() => {
-                window.location.reload();
-            }, 1800);
+            showToast(res.message || 'Instalador iniciado! Conclua o assistente para atualizar.', 'success');
+            updateBtnText.textContent = 'Atualizações';
         } else {
             showToast(`Falha ao atualizar: ${res.message}`, 'error');
             updateBtnText.textContent = 'Atualizações';
