@@ -6,6 +6,7 @@ const { getInstalledApps } = require('./core/inventory');
 const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
+const { checkForUpdates, applyUpdate } = require('./core/updater');
 
 let mainWindow = null;
 let isBatchCancelled = false;
@@ -142,6 +143,18 @@ function startInternalServer() {
             isBatchCancelled = true;
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             return res.end(JSON.stringify({ cancelled: true }));
+        }
+
+        if (pathname === '/api/check-update' && req.method === 'GET') {
+            const updateInfo = await checkForUpdates();
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            return res.end(JSON.stringify(updateInfo));
+        }
+
+        if (pathname === '/api/apply-update' && req.method === 'POST') {
+            const result = await applyUpdate();
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            return res.end(JSON.stringify(result));
         }
 
         if (pathname === '/api/batch' && req.method === 'POST') {
@@ -316,4 +329,19 @@ ipcMain.handle('cancel-batch', () => {
 ipcMain.handle('start-batch-uninstall', async (event, apps, options = {}) => {
     runBatchQueue(apps, options);
     return { success: true };
+});
+
+ipcMain.handle('check-for-updates', async () => {
+    return await checkForUpdates();
+});
+
+ipcMain.handle('apply-update', async () => {
+    const res = await applyUpdate();
+    if (res.success && app.relaunch) {
+        setTimeout(() => {
+            app.relaunch();
+            app.exit(0);
+        }, 1500);
+    }
+    return res;
 });

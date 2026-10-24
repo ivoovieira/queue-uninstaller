@@ -44,6 +44,8 @@ if (!window.api || !window.api.getInstalledApps) {
             body: JSON.stringify({ apps, options })
         }).then(r => r.json()),
         cancelBatch: () => fetch(`${API_BASE}/api/cancel-batch`, { method: 'POST' }).then(r => r.json()),
+        checkForUpdates: () => fetch(`${API_BASE}/api/check-update`).then(r => r.json()),
+        applyUpdate: () => fetch(`${API_BASE}/api/apply-update`, { method: 'POST' }).then(r => r.json()),
         openFolder: () => {},
         onBatchStatus: (cb) => {
             batchListeners.push(cb);
@@ -86,6 +88,10 @@ const optSilent = document.getElementById('optSilent');
 const optScanLeftovers = document.getElementById('optScanLeftovers');
 const optAutoClean = document.getElementById('optAutoClean');
 const optRestorePoint = document.getElementById('optRestorePoint');
+const optRecycleBin = document.getElementById('optRecycleBin');
+const btnCheckUpdate = document.getElementById('btnCheckUpdate');
+const badgeUpdate = document.getElementById('badgeUpdate');
+const updateBtnText = document.getElementById('updateBtnText');
 
 // Modais
 const batchModal = document.getElementById('batchModal');
@@ -116,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadApps();
     setupEventListeners();
     setupBatchListener();
+    checkAppUpdates(false);
 });
 
 function setupEventListeners() {
@@ -183,6 +190,10 @@ function setupEventListeners() {
 
     // Botões de Ação
     document.getElementById('btnRefresh').addEventListener('click', loadApps);
+
+    btnCheckUpdate.addEventListener('click', () => {
+        checkAppUpdates(true);
+    });
 
     document.getElementById('btnCreateRestore').addEventListener('click', async () => {
         showToast('Criando ponto de restauração no Windows...', 'info');
@@ -354,7 +365,6 @@ function renderTable() {
             <td>${sizeFormatted}</td>
             <td><span class="badge-arch ${archBadge}">${escapeHtml(app.Architecture || '64-bit')}</span></td>
             <td>${dateFormatted}</td>
-            <td><span class="badge-installer ${badgeClass}">${escapeHtml(app.InstallerType)}</span></td>
             <td>
                 <div class="row-actions">
                     <button class="btn-icon-action" data-action="scan" data-id="${escapeHtml(app.Id)}" title="Varrer sobras no Registro e Disco">
@@ -707,7 +717,62 @@ async function executeLeftoverClean() {
     }
 }
 
-// Helpers
+// Verificação e aplicação de atualizações do GitHub
+async function checkAppUpdates(isManual = false) {
+    if (!window.api || !window.api.checkForUpdates) return;
+    
+    if (isManual) {
+        updateBtnText.textContent = 'Verificando...';
+        showToast('Verificando atualizações no GitHub...', 'info');
+    }
+
+    try {
+        const res = await window.api.checkForUpdates();
+        updateBtnText.textContent = 'Atualizações';
+
+        if (res.hasUpdate) {
+            badgeUpdate.classList.remove('hidden');
+            if (isManual) {
+                const confirmUpdate = window.confirm(
+                    `🚀 Nova atualização disponível no GitHub!\nVersão remota: commit ${res.remoteCommit} (atual: ${res.localCommit})\n\nDeseja baixar e aplicar a atualização agora?`
+                );
+                if (confirmUpdate) {
+                    applyAppUpdate();
+                }
+            } else {
+                showToast(`Nova atualização disponível (${res.remoteCommit})! Clique em "Atualizações" no topo para aplicar.`, 'info');
+            }
+        } else {
+            badgeUpdate.classList.add('hidden');
+            if (isManual) {
+                showToast('O RevoQueue já está na versão mais recente!', 'success');
+            }
+        }
+    } catch (e) {
+        updateBtnText.textContent = 'Atualizações';
+        if (isManual) showToast(`Erro ao checar atualizações: ${e.message}`, 'error');
+    }
+}
+
+async function applyAppUpdate() {
+    updateBtnText.textContent = 'Atualizando...';
+    showToast('Baixando atualização do GitHub... Aguarde.', 'info');
+    try {
+        const res = await window.api.applyUpdate();
+        if (res.success) {
+            showToast('Atualizado com sucesso! Reiniciando em instantes...', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1800);
+        } else {
+            showToast(`Falha ao atualizar: ${res.message}`, 'error');
+            updateBtnText.textContent = 'Atualizações';
+        }
+    } catch (e) {
+        showToast(`Erro na atualização: ${e.message}`, 'error');
+        updateBtnText.textContent = 'Atualizações';
+    }
+}
 function formatSize(bytes) {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;

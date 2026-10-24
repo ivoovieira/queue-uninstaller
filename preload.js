@@ -9,6 +9,8 @@ const api = {
     startBatchUninstall: (apps, options) => ipcRenderer.invoke('start-batch-uninstall', apps, options),
     cancelBatch: () => ipcRenderer.invoke('cancel-batch'),
     openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    applyUpdate: () => ipcRenderer.invoke('apply-update'),
     
     onBatchStatus: (callback) => {
         const sub = (event, data) => callback(data);
@@ -17,7 +19,6 @@ const api = {
     }
 };
 
-// Injeta via contextBridge se contextIsolation estiver ativo
 if (process.contextIsolated && contextBridge && contextBridge.exposeInMainWorld) {
     try {
         contextBridge.exposeInMainWorld('api', api);
@@ -26,7 +27,6 @@ if (process.contextIsolated && contextBridge && contextBridge.exposeInMainWorld)
     }
 }
 
-// Injeta diretamente em window se contextIsolation estiver desativado
 try {
     window.api = api;
 } catch (e) {}

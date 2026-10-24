@@ -1,9 +1,13 @@
 param(
     [Parameter(Mandatory=$true)]
-    [string]$ItemsJson
+    [string]$ItemsJson,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$UseRecycleBin = $true
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
 
 $forbiddenFolders = @(
     "C:\", "C:\Windows", "C:\Windows\System32", "C:\Program Files", "C:\Program Files (x86)",
@@ -15,7 +19,10 @@ $forbiddenKeys = @(
     "HKEY_LOCAL_MACHINE\Software", "HKEY_LOCAL_MACHINE\Software\Microsoft",
     "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows", "HKEY_CURRENT_USER\Software",
     "HKEY_CURRENT_USER\Software\Microsoft", "HKEY_CURRENT_USER\Software\Microsoft\Windows",
-    "HKEY_LOCAL_MACHINE\Software\Wow6432Node", "HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft"
+    "HKEY_LOCAL_MACHINE\Software\Wow6432Node", "HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft",
+    "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services",
+    "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum",
+    "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control"
 ) | ForEach-Object { $_.ToLower() }
 
 $data = $ItemsJson | ConvertFrom-Json
@@ -24,7 +31,7 @@ $removedFiles = [System.Collections.Generic.List[string]]::new()
 $removedRegistry = [System.Collections.Generic.List[string]]::new()
 $errors = [System.Collections.Generic.List[string]]::new()
 
-# Deletar arquivos e pastas
+# Deletar arquivos e pastas (com envio para a Lixeira se possível)
 if ($data.FileSystemLeftovers) {
     foreach ($item in $data.FileSystemLeftovers) {
         $p = $item.Path
@@ -37,10 +44,21 @@ if ($data.FileSystemLeftovers) {
 
         if (Test-Path $p) {
             try {
-                Remove-Item -Path $p -Recurse -Force -ErrorAction Stop
-                $removedFiles.Add($p)
+                $isDir = (Get-Item $p) -is [System.IO.DirectoryInfo]
+                if ($isDir) {
+                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                } else {
+                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                }
+                $removedFiles.Add("$p (enviado à Lixeira)")
             } catch {
-                $errors.Add("Falha ao remover arquivo/pasta $p : $($_.Exception.Message)")
+                # Fallback para exclusão direta
+                try {
+                    Remove-Item -Path $p -Recurse -Force -ErrorAction Stop
+                    $removedFiles.Add($p)
+                } catch {
+                    $errors.Add("Falha ao remover arquivo/pasta $p : $($_.Exception.Message)")
+                }
             }
         }
     }
@@ -53,7 +71,7 @@ if ($data.RegistryLeftovers) {
         if (-not $psPath) { continue }
         $valName = $reg.ValueName
 
-        # Se for um valor específico (AppCompatFlags, FeatureUsage, MuiCache, etc.)
+        # Se for um valor específico (AppCompatFlags, FeatureUsage, MuiCache, Run, etc.)
         if ($valName -and ($valName.Trim() -ne "")) {
             if (Test-Path $psPath) {
                 try {
