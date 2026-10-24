@@ -46,4 +46,27 @@ function getInstalledApps() {
     });
 }
 
-module.exports = { getInstalledApps };
+function getWindowsApps() {
+    return new Promise((resolve) => {
+        const scriptPath = path.join(__dirname, '..', 'scripts', 'get_windows_apps.ps1');
+        const child = spawn('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', scriptPath
+        ], { windowsHide: true });
+
+        let stdout = '';
+        child.stdout.on('data', d => stdout += d.toString('utf8'));
+        child.on('close', () => {
+            try {
+                const jsonStart = stdout.indexOf('[');
+                if (jsonStart !== -1) {
+                    return resolve(JSON.parse(stdout.substring(jsonStart)));
+                }
+            } catch (e) {}
+            resolve([]);
+        });
+    });
+}
+
+module.exports = { getInstalledApps, getWindowsApps };

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const api = {
     getInstalledApps: () => ipcRenderer.invoke('get-installed-apps'),
+    getWindowsApps: () => ipcRenderer.invoke('get-windows-apps'),
     scanLeftovers: (app, scanLevel) => ipcRenderer.invoke('scan-leftovers', app, scanLevel),
     cleanLeftovers: (items) => ipcRenderer.invoke('clean-leftovers', items),
     createRestorePoint: (desc) => ipcRenderer.invoke('create-restore-point', desc),

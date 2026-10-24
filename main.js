@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
-const { getInstalledApps } = require('./core/inventory');
+const { getInstalledApps, getWindowsApps } = require('./core/inventory');
 const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
@@ -63,6 +63,17 @@ function startInternalServer() {
         if (pathname === '/api/apps' && req.method === 'GET') {
             try {
                 const apps = await getInstalledApps();
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify(apps));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: err.message }));
+            }
+        }
+
+        if (pathname === '/api/windows-apps' && req.method === 'GET') {
+            try {
+                const apps = await getWindowsApps();
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                 return res.end(JSON.stringify(apps));
             } catch (err) {
@@ -264,6 +275,7 @@ function createWindow() {
         minWidth: 1000,
         minHeight: 650,
         backgroundColor: '#0f172a',
+        icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -299,6 +311,10 @@ app.on('window-all-closed', () => {
 // IPC Handlers para quando rodar via Electron nativo
 ipcMain.handle('get-installed-apps', async () => {
     return await getInstalledApps();
+});
+
+ipcMain.handle('get-windows-apps', async () => {
+    return await getWindowsApps();
 });
 
 ipcMain.handle('scan-leftovers', async (event, appItem, scanLevel) => {

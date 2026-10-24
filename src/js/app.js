@@ -18,6 +18,7 @@ if (!window.api || !window.api.getInstalledApps) {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
         }),
+        getWindowsApps: () => fetch(`${API_BASE}/api/windows-apps`).then(r => r.json()),
         scanLeftovers: (app, scanLevel) => fetch(`${API_BASE}/api/scan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -191,6 +192,44 @@ function setupEventListeners() {
     // Botões de Ação
     document.getElementById('btnRefresh').addEventListener('click', loadApps);
 
+    // Abas do Ribbon
+    const tabPrograms = document.getElementById('tabPrograms');
+    const tabWindowsApps = document.getElementById('tabWindowsApps');
+
+    tabPrograms.addEventListener('click', () => {
+        tabPrograms.classList.add('active');
+        tabWindowsApps.classList.remove('active');
+        loadApps();
+    });
+
+    tabWindowsApps.addEventListener('click', async () => {
+        tabWindowsApps.classList.add('active');
+        tabPrograms.classList.remove('active');
+        loadWindowsApps();
+    });
+
+    // Botão Desinstalar Fila no Header
+    document.getElementById('btnHeaderBatch').addEventListener('click', () => {
+        if (selectedAppIds.size === 0) {
+            showToast('Nenhum programa selecionado. Marque os programas que deseja desinstalar na fila.', 'info');
+            return;
+        }
+        executeBatch();
+    });
+
+    // Modal de Opções
+    const optionsModal = document.getElementById('optionsModal');
+    document.getElementById('btnOptionsModal').addEventListener('click', () => {
+        optionsModal.classList.remove('hidden');
+    });
+    document.getElementById('btnCloseOptions').addEventListener('click', () => {
+        optionsModal.classList.add('hidden');
+    });
+    document.getElementById('btnSaveOptions').addEventListener('click', () => {
+        optionsModal.classList.add('hidden');
+        showToast('Configurações salvas com sucesso!', 'success');
+    });
+
     btnCheckUpdate.addEventListener('click', () => {
         checkAppUpdates(true);
     });
@@ -227,6 +266,29 @@ function setupEventListeners() {
         leftoverModal.classList.add('hidden');
     });
     btnCleanSelectedLeftovers.addEventListener('click', executeLeftoverClean);
+}
+
+async function loadWindowsApps() {
+    loadingState.classList.remove('hidden');
+    appsTable.classList.add('hidden');
+    emptyState.classList.add('hidden');
+    statTotalApps.textContent = 'Buscando Windows Apps...';
+
+    try {
+        allApps = await window.api.getWindowsApps();
+        statTotalApps.textContent = `${allApps.length} apps da Store`;
+        statTotalSize.textContent = '--';
+        loadingState.classList.add('hidden');
+        appsTable.classList.remove('hidden');
+        applyFiltersAndRender();
+    } catch (err) {
+        loadingState.innerHTML = `
+            <div style="color: var(--accent-red); font-size: 2rem;">⚠️</div>
+            <h3>Erro ao obter aplicativos da Store</h3>
+            <p>${err.message}</p>
+            <button class="btn btn-secondary" onclick="loadWindowsApps()">Tentar Novamente</button>
+        `;
+    }
 }
 
 // Carregar inventário de programas
@@ -357,14 +419,14 @@ function renderTable() {
                     ${iconHtml}
                     <div class="app-names">
                         <span class="app-display-name">${escapeHtml(app.DisplayName)}</span>
-                        <span class="app-publisher">${escapeHtml(app.Publisher || 'Fabricante não informado')}${webSiteHtml}</span>
                     </div>
                 </div>
             </td>
+            <td><b>${sizeFormatted}</b></td>
             <td>${escapeHtml(app.DisplayVersion || '--')}</td>
-            <td>${sizeFormatted}</td>
             <td><span class="badge-arch ${archBadge}">${escapeHtml(app.Architecture || '64-bit')}</span></td>
             <td>${dateFormatted}</td>
+            <td>${escapeHtml(app.Publisher || 'Não informado')}${webSiteHtml}</td>
             <td>
                 <div class="row-actions">
                     <button class="btn-icon-action" data-action="scan" data-id="${escapeHtml(app.Id)}" title="Varrer sobras no Registro e Disco">
@@ -460,7 +522,11 @@ function invertSelection() {
 
 function updateBatchBar() {
     const count = selectedAppIds.size;
-    statSelectedCount.textContent = `${count} selecionado${count !== 1 ? 's' : ''}`;
+    const selectedApps = allApps.filter(a => selectedAppIds.has(a.Id));
+    const totalKb = selectedApps.reduce((acc, a) => acc + (a.EstimatedSizeKb || 0), 0);
+    const sizeStr = totalKb > 0 ? formatSize(totalKb * 1024) : '0 MB';
+
+    statSelectedCount.textContent = `${count} selecionado${count !== 1 ? 's' : ''} (~${sizeStr})`;
 
     if (count === 0) {
         batchBar.classList.add('hidden');
@@ -470,11 +536,6 @@ function updateBatchBar() {
     batchBar.classList.remove('hidden');
     batchBadgeCount.textContent = count;
     batchBarTitle.textContent = `${count} programa${count > 1 ? 's' : ''} na fila de remoção`;
-
-    // Calcula tamanho total selecionado
-    const selectedApps = allApps.filter(a => selectedAppIds.has(a.Id));
-    const totalKb = selectedApps.reduce((acc, a) => acc + (a.EstimatedSizeKb || 0), 0);
-    const sizeStr = totalKb > 0 ? formatSize(totalKb * 1024) : 'não informado';
     batchBarSubtitle.textContent = `Espaço total estimado a liberar: ~${sizeStr}`;
     btnStartBatch.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
