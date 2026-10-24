@@ -1,42 +1,50 @@
-// Adaptador universal para rodar tanto no Electron nativo quanto no Web Desktop App
-if (!window.api) {
+// Configura adaptador universal para rodar nativo no Electron ou via Web App
+const API_BASE = window.location.protocol.startsWith('http') ? '' : 'http://localhost:38456';
+
+if (!window.api || !window.api.getInstalledApps) {
     let batchListeners = [];
-    const evtSource = new EventSource('/api/events');
-    evtSource.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
-            batchListeners.forEach(cb => cb(data));
-        } catch (err) {}
-    };
+    try {
+        const evtSource = new EventSource(`${API_BASE}/api/events`);
+        evtSource.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                batchListeners.forEach(cb => cb(data));
+            } catch (err) {}
+        };
+    } catch (e) {}
 
     window.api = {
-        getInstalledApps: () => fetch('/api/apps').then(r => r.json()),
-        scanLeftovers: (app, scanLevel) => fetch('/api/scan', {
+        getInstalledApps: () => fetch(`${API_BASE}/api/apps`).then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        }),
+        scanLeftovers: (app, scanLevel) => fetch(`${API_BASE}/api/scan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ app, scanLevel })
         }).then(r => r.json()),
-        cleanLeftovers: (items) => fetch('/api/clean', {
+        cleanLeftovers: (items) => fetch(`${API_BASE}/api/clean`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(items)
         }).then(r => r.json()),
-        createRestorePoint: (desc) => fetch('/api/restore', {
+        createRestorePoint: (desc) => fetch(`${API_BASE}/api/restore`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ desc })
         }).then(r => r.json()),
-        runSingleUninstall: (app, options) => fetch('/api/uninstall', {
+        runSingleUninstall: (app, options) => fetch(`${API_BASE}/api/uninstall`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ app, options })
         }).then(r => r.json()),
-        startBatchUninstall: (apps, options) => fetch('/api/batch', {
+        startBatchUninstall: (apps, options) => fetch(`${API_BASE}/api/batch`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ apps, options })
         }).then(r => r.json()),
-        cancelBatch: () => fetch('/api/cancel-batch', { method: 'POST' }).then(r => r.json()),
+        cancelBatch: () => fetch(`${API_BASE}/api/cancel-batch`, { method: 'POST' }).then(r => r.json()),
+        openFolder: () => {},
         onBatchStatus: (cb) => {
             batchListeners.push(cb);
             return () => { batchListeners = batchListeners.filter(l => l !== cb); };
@@ -101,6 +109,10 @@ const btnCleanSelectedLeftovers = document.getElementById('btnCleanSelectedLefto
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('>>> DOMContentLoaded: window.api existe?', !!window.api);
+    if (window.api) {
+        console.log('>>> Métodos disponíveis em window.api:', Object.keys(window.api));
+    }
     loadApps();
     setupEventListeners();
     setupBatchListener();
@@ -207,7 +219,7 @@ function setupEventListeners() {
 }
 
 // Carregar inventário de programas
-async function loadApps() {
+async function loadApps(retryCount = 0) {
     loadingState.classList.remove('hidden');
     appsTable.classList.add('hidden');
     emptyState.classList.add('hidden');
@@ -225,11 +237,17 @@ async function loadApps() {
 
         applyFiltersAndRender();
     } catch (err) {
+        if (retryCount < 2) {
+            console.log('Tentando reconectar em 1 segundo...');
+            setTimeout(() => loadApps(retryCount + 1), 1000);
+            return;
+        }
+
         loadingState.innerHTML = `
             <div style="color: var(--accent-red); font-size: 2rem;">⚠️</div>
             <h3>Erro ao obter lista de programas</h3>
             <p>${err.message}</p>
-            <button class="btn btn-secondary" onclick="loadApps()">Tentar Novamente</button>
+            <button class="btn btn-secondary" onclick="loadApps(0)">Tentar Novamente</button>
         `;
     }
 }
