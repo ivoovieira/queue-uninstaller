@@ -244,28 +244,33 @@ body {
 
 .filter-chips {
     display: flex;
-    gap: 6px;
+    gap: 12px;
+    align-items: center;
 }
 
 .chip {
-    background-color: var(--bg-surface-elevated);
-    border: 1px solid var(--border-color);
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
     color: var(--text-secondary);
-    padding: 4px 10px;
-    border-radius: 14px;
-    font-size: 0.78rem;
+    padding: 4px 4px;
+    border-radius: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .chip:hover {
     color: var(--text-primary);
+    background: transparent !important;
 }
 
 .chip.active {
-    background-color: var(--accent-blue);
-    border-color: var(--accent-blue);
-    color: white;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #3b82f6 !important;
+    color: #ffffff;
     font-weight: 600;
 }
 
@@ -408,12 +413,20 @@ body {
 }
 
 .publisher-link {
+    color: #60a5fa;
     text-decoration: none;
-    margin-left: 4px;
     font-size: 0.82rem;
-    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 150px;
+    vertical-align: middle;
 }
-.publisher-link:hover { opacity: 1; }
+.publisher-link:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+}
 
 .badge-arch {
     display: inline-block;

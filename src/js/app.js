@@ -468,9 +468,16 @@ function renderTable() {
             ? `<img src="${app.IconBase64}" class="app-icon-img" alt="${escapeHtml(app.DisplayName)}" onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>${initialLetter}</div>'">`
             : `<div class="app-icon-fallback">${initialLetter}</div>`;
 
-        const webSiteHtml = app.WebSite 
-            ? ` <a href="${escapeHtml(app.WebSite)}" target="_blank" class="publisher-link" title="Visitar site: ${escapeHtml(app.WebSite)}" onclick="event.stopPropagation()">🌐</a>` 
-            : '';
+        let cleanSiteDisplay = '';
+        if (app.WebSite) {
+            cleanSiteDisplay = app.WebSite.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+            if (cleanSiteDisplay.length > 25) {
+                cleanSiteDisplay = cleanSiteDisplay.substring(0, 22) + '...';
+            }
+        }
+        const siteHtml = app.WebSite 
+            ? `<a href="${escapeHtml(app.WebSite)}" target="_blank" class="publisher-link" title="${escapeHtml(app.WebSite)}" onclick="event.stopPropagation()">${escapeHtml(cleanSiteDisplay)}</a>`
+            : `<span style="color: var(--text-muted);">-</span>`;
 
         tr.innerHTML = `
             <td class="text-center">
@@ -488,11 +495,12 @@ function renderTable() {
             <td>${escapeHtml(app.DisplayVersion || '--')}</td>
             <td><span class="badge-arch ${archBadge}">${escapeHtml(app.Architecture || '64-bit')}</span></td>
             <td>${dateFormatted}</td>
-            <td>${escapeHtml(app.Publisher || 'Não informado')}${webSiteHtml}</td>
+            <td>${escapeHtml(app.Publisher || 'Não informado')}</td>
+            <td>${siteHtml}</td>
             <td class="text-center">
                 <div class="row-actions">
                     <button class="btn-icon-action danger" data-action="uninstall" data-id="${escapeHtml(app.Id)}" title="Desinstalar este aplicativo">
-                        🗑️ Desinstalar
+                        Desinstalar
                     </button>
                 </div>
             </td>
