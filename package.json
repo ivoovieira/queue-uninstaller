@@ -1,0 +1,23 @@
+{
+  "name": "revoqueue-uninstaller",
+  "version": "1.0.0",
+  "description": "Desinstalador de múltiplos programas em lote & varredura profunda de sobras para Windows",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js"
+  },
+  "keywords": [
+    "revo",
+    "uninstaller",
+    "batch",
+    "windows",
+    "cleanup"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}

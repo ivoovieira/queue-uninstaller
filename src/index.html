@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RevoQueue Uninstaller - Desinstalação em Fila & Limpeza Profunda</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Header -->
+        <header class="app-header">
+            <div class="logo-section">
+                <div class="app-icon">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="app-title">RevoQueue <span>Uninstaller</span></h1>
+                    <p class="app-subtitle">Desinstalação de múltiplos programas em lote & varredura profunda de sobras</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <button id="btnCreateRestore" class="btn btn-secondary" title="Criar Ponto de Restauração no Windows">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Ponto de Restauração
+                </button>
+                <button id="btnRefresh" class="btn btn-secondary" title="Recarregar lista de programas">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Recarregar
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="stats-strip">
+            <div class="stat-item">
+                <span class="stat-label">Total Instalados:</span>
+                <span id="statTotalApps" class="stat-value">Carregando...</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Espaço Total Estimado:</span>
+                <span id="statTotalSize" class="stat-value">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Fila Atual:</span>
+                <span id="statSelectedCount" class="stat-value highlight">0 selecionados</span>
+            </div>
+        </div>
+
+        <!-- Controls & Filters Toolbar -->
+        <div class="toolbar">
+            <div class="search-box">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Pesquisar programa, fabricante ou versão... (Ctrl+F)" autofocus>
+                <button id="btnClearSearch" class="btn-clear hidden" title="Limpar pesquisa">&times;</button>
+            </div>
+
+            <div class="filter-chips">
+                <button class="chip active" data-filter="all">Todos</button>
+                <button class="chip" data-filter="large">Grandes (> 500 MB)</button>
+                <button class="chip" data-filter="silent">Com Modo Silencioso</button>
+                <button class="chip" data-filter="recent">Mais Recentes</button>
+            </div>
+
+            <div class="selection-actions">
+                <button id="btnSelectAll" class="btn-text">Selecionar Todos</button>
+                <button id="btnDeselectAll" class="btn-text">Desmarcar</button>
+                <button id="btnInvertSelection" class="btn-text">Inverter</button>
+            </div>
+        </div>
+
+        <!-- Main Apps List -->
+        <main class="table-container">
+            <div id="loadingState" class="state-overlay">
+                <div class="spinner"></div>
+                <h3>Examinando Registro e Sistema do Windows...</h3>
+                <p>Detectando aplicativos instalados, tamanhos e instaladores silenciosos</p>
+            </div>
+
+            <table id="appsTable" class="apps-table hidden">
+                <thead>
+                    <tr>
+                        <th width="48" class="text-center">
+                            <input type="checkbox" id="checkSelectAllHeader" title="Selecionar Todos Visíveis">
+                        </th>
+                        <th class="sortable" data-sort="name">Programa / Fabricante <span class="sort-icon">↕</span></th>
+                        <th width="120" class="sortable" data-sort="version">Versão <span class="sort-icon">↕</span></th>
+                        <th width="120" class="sortable" data-sort="size">Tamanho <span class="sort-icon">↕</span></th>
+                        <th width="120" class="sortable" data-sort="date">Instalado Em <span class="sort-icon">↕</span></th>
+                        <th width="120">Instalador</th>
+                        <th width="160" class="text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="appsTableBody">
+                    <!-- Gerado via JavaScript -->
+                </tbody>
+            </table>
+
+            <div id="emptyState" class="state-overlay hidden">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <h3>Nenhum programa correspondente encontrado</h3>
+                <p>Tente ajustar os termos de pesquisa ou remover os filtros aplicados</p>
+            </div>
+        </main>
+
+        <!-- Floating Batch Action Bar -->
+        <div id="batchBar" class="batch-bar hidden">
+            <div class="batch-info">
+                <div class="batch-badge" id="batchBadgeCount">0</div>
+                <div>
+                    <h3 id="batchBarTitle">0 programas selecionados para remoção</h3>
+                    <p id="batchBarSubtitle">Tamanho total estimado a liberar: 0 MB</p>
+                </div>
+            </div>
+
+            <div class="batch-options">
+                <label class="option-check" title="Executa instaladores silenciosamente sem exibir assistentes na tela">
+                    <input type="checkbox" id="optSilent" checked>
+                    <span>Modo Silencioso</span>
+                </label>
+                <label class="option-check" title="Escanear chaves do Registro e pastas remanescentes após cada app">
+                    <input type="checkbox" id="optScanLeftovers" checked>
+                    <span>Varrer Sobras</span>
+                </label>
+                <label class="option-check" title="Apaga as sobras encontradas automaticamente sem interromper a fila">
+                    <input type="checkbox" id="optAutoClean" checked>
+                    <span>Limpeza Automática</span>
+                </label>
+                <label class="option-check" title="Cria um ponto no Windows antes de começar">
+                    <input type="checkbox" id="optRestorePoint">
+                    <span>Criar Ponto Restauração</span>
+                </label>
+            </div>
+
+            <div class="batch-buttons">
+                <button id="btnCancelSelection" class="btn btn-secondary">Cancelar</button>
+                <button id="btnStartBatch" class="btn btn-danger">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Desinstalar Fila Agora
+                </button>
+            </div>
+        </div>
+
+        <!-- Batch Execution Modal -->
+        <div id="batchModal" class="modal-overlay hidden">
+            <div class="modal-content batch-modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2>Processando Fila de Desinstalação</h2>
+                        <p id="batchModalSubtitle">Removendo programas sequencialmente para evitar conflitos no Windows</p>
+                    </div>
+                    <button id="btnAbortBatch" class="btn btn-danger-outline">Interromper Fila</button>
+                </div>
+
+                <div class="batch-progress-section">
+                    <div class="progress-info">
+                        <span id="batchProgressLabel">Progresso: 0 de 0 (0%)</span>
+                        <span id="batchCurrentAction">Iniciando...</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div id="batchProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="batch-queue-list" id="batchQueueList">
+                    <!-- Itens da fila gerados via JS -->
+                </div>
+
+                <div class="modal-footer" id="batchModalFooter" style="display: none;">
+                    <div class="summary-text" id="batchSummaryText">Fila concluída com sucesso!</div>
+                    <button id="btnCloseBatchModal" class="btn btn-primary">Fechar e Atualizar Lista</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leftover Details Modal -->
+        <div id="leftoverModal" class="modal-overlay hidden">
+            <div class="modal-content leftover-modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 id="leftoverAppTitle">Varredura de Sobras</h2>
+                        <p id="leftoverAppSubtitle">Analise as chaves de registro e pastas residuais encontradas no sistema</p>
+                    </div>
+                    <button id="btnCloseLeftoverModal" class="btn-close">&times;</button>
+                </div>
+
+                <div class="leftover-stats">
+                    <div class="l-stat">Chaves no Registro: <b id="leftoverRegCount">0</b></div>
+                    <div class="l-stat">Pastas e Atalhos no Disco: <b id="leftoverFileCount">0</b></div>
+                    <div class="l-stat">Espaço a Liberar: <b id="leftoverTotalSize">0 MB</b></div>
+                </div>
+
+                <div class="leftover-sections">
+                    <div class="leftover-box">
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7z"/>
+                                <path d="M9 12h6M9 16h6"/>
+                            </svg>
+                            Registro do Windows (Chaves & Valores)
+                        </h3>
+                        <div id="leftoverRegList" class="leftover-items-list"></div>
+                    </div>
+
+                    <div class="leftover-box">
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                            </svg>
+                            Arquivos, Pastas e Atalhos no Disco
+                        </h3>
+                        <div id="leftoverFileList" class="leftover-items-list"></div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="btnCancelLeftover" class="btn btn-secondary">Fechar</button>
+                    <button id="btnCleanSelectedLeftovers" class="btn btn-danger">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        Excluir Sobras Selecionadas
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
