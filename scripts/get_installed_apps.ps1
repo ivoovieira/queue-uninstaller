@@ -1,5 +1,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
+
 $keys = @(
     'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -32,9 +34,6 @@ function Get-OptimizedQuietString($uninstallStr, $quietStr, $installerType) {
             if ($u -match '(?i)msiexec(\.exe)?\s+/x\s*(\{[^}]+\})') {
                 return "MsiExec.exe /X$($Matches[2]) /qn /norestart"
             }
-            if ($u -match '(?i)/x') {
-                return "$u /qn /norestart"
-            }
             return "$u /qn /norestart"
         }
         'InnoSetup' {
@@ -52,6 +51,42 @@ function Get-OptimizedQuietString($uninstallStr, $quietStr, $installerType) {
     }
 }
 
+function Get-IconBase64($iconPath, $installLoc, $uninstallStr) {
+    $candidate = ''
+    if ($iconPath) {
+        $c = ($iconPath -split ',')[0].Trim('"').Trim()
+        if (Test-Path $c) { $candidate = $c }
+    }
+    if (-not $candidate -and $uninstallStr) {
+        $c = ($uninstallStr -split ' ')[0].Trim('"').Trim()
+        if ($c -match '\.exe$' -and (Test-Path $c)) { $candidate = $c }
+    }
+    if (-not $candidate -and $installLoc) {
+        $loc = $installLoc.Trim('"').Trim()
+        if (Test-Path $loc) {
+            $exe = Get-ChildItem -Path $loc -Filter "*.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($exe) { $candidate = $exe.FullName }
+        }
+    }
+
+    if ($candidate -and (Test-Path $candidate)) {
+        try {
+            $ico = [System.Drawing.Icon]::ExtractAssociatedIcon($candidate)
+            if ($ico) {
+                $bmp = $ico.ToBitmap()
+                $ms = New-Object System.IO.MemoryStream
+                $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+                $b64 = [Convert]::ToBase64String($ms.ToArray())
+                $ms.Dispose()
+                $ico.Dispose()
+                $bmp.Dispose()
+                return "data:image/png;base64,$b64"
+            }
+        } catch {}
+    }
+    return ''
+}
+
 $appList = foreach ($app in $rawApps) {
     $installerType = Detect-InstallerType -uninstallStr $app.UninstallString -quietStr $app.QuietUninstallString
     $bestQuiet = Get-OptimizedQuietString -uninstallStr $app.UninstallString -quietStr $app.QuietUninstallString -installerType $installerType
@@ -66,13 +101,19 @@ $appList = foreach ($app in $rawApps) {
         } catch {}
     }
 
-    $iconPath = ''
-    if ($app.DisplayIcon) {
-        $rawIcon = ($app.DisplayIcon -split ',')[0].Trim('"')
-        if (Test-Path $rawIcon) {
-            $iconPath = $rawIcon
-        }
+    # Arquitetura (32-bit vs 64-bit)
+    $arch = if ($app.PSPath -match 'Wow6432Node') { '32-bit' } else { '64-bit' }
+
+    # Site na Internet (URLInfoAbout ou HelpLink)
+    $webSite = ''
+    if ($app.URLInfoAbout) {
+        $webSite = [string]$app.URLInfoAbout
+    } elseif ($app.HelpLink) {
+        $webSite = [string]$app.HelpLink
     }
+
+    # Ícone oficial em Base64
+    $iconB64 = Get-IconBase64 -iconPath $app.DisplayIcon -installLoc $app.InstallLocation -uninstallStr $app.UninstallString
 
     [PSCustomObject]@{
         Id = [string]$app.PSChildName
@@ -86,7 +127,10 @@ $appList = foreach ($app in $rawApps) {
         QuietUninstallString = $bestQuiet
         RawQuietString = [string]$app.QuietUninstallString
         InstallerType = $installerType
-        DisplayIcon = $iconPath
+        Architecture = $arch
+        WebSite = $webSite
+        Comments = [string]$app.Comments
+        IconBase64 = $iconB64
         RegistryPath = [string]$app.PSPath
     }
 }

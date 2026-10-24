@@ -46,23 +46,38 @@ if ($data.FileSystemLeftovers) {
     }
 }
 
-# Deletar chaves do registro
+# Deletar chaves e valores do registro
 if ($data.RegistryLeftovers) {
     foreach ($reg in $data.RegistryLeftovers) {
         $psPath = $reg.PSPath
         if (-not $psPath) { continue }
-        $keyName = $reg.KeyPath
-        if ($keyName -and ($forbiddenKeys -contains $keyName.ToLower())) {
-            $errors.Add("Proteção de Segurança: Impedida a exclusão de chave mestra do registro: $keyName")
-            continue
-        }
+        $valName = $reg.ValueName
 
-        if (Test-Path $psPath) {
-            try {
-                Remove-Item -Path $psPath -Recurse -Force -ErrorAction Stop
-                $removedRegistry.Add($psPath)
-            } catch {
-                $errors.Add("Falha ao remover registro $psPath : $($_.Exception.Message)")
+        # Se for um valor específico (AppCompatFlags, FeatureUsage, MuiCache, etc.)
+        if ($valName -and ($valName.Trim() -ne "")) {
+            if (Test-Path $psPath) {
+                try {
+                    Remove-ItemProperty -Path $psPath -Name $valName -Force -ErrorAction Stop
+                    $removedRegistry.Add("$psPath -> $valName")
+                } catch {
+                    $errors.Add("Falha ao remover valor do registro $valName em $psPath : $($_.Exception.Message)")
+                }
+            }
+        } else {
+            # Se for a chave inteira
+            $keyName = $reg.KeyPath
+            if ($keyName -and ($forbiddenKeys -contains $keyName.ToLower())) {
+                $errors.Add("Proteção de Segurança: Impedida a exclusão de chave mestra do registro: $keyName")
+                continue
+            }
+
+            if (Test-Path $psPath) {
+                try {
+                    Remove-Item -Path $psPath -Recurse -Force -ErrorAction Stop
+                    $removedRegistry.Add($psPath)
+                } catch {
+                    $errors.Add("Falha ao remover chave do registro $psPath : $($_.Exception.Message)")
+                }
             }
         }
     }

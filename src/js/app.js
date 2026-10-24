@@ -327,6 +327,15 @@ function renderTable() {
         const badgeClass = getBadgeClass(app.InstallerType);
         const sizeFormatted = app.EstimatedSizeKb ? formatSize(app.EstimatedSizeKb * 1024) : 'Desconhecido';
         const dateFormatted = formatDate(app.InstallDate);
+        const archBadge = app.Architecture === '64-bit' ? 'badge-64' : 'badge-32';
+
+        const iconHtml = app.IconBase64 
+            ? `<img src="${app.IconBase64}" class="app-icon-img" alt="${escapeHtml(app.DisplayName)}" onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>${initialLetter}</div>'">`
+            : `<div class="app-icon-fallback">${initialLetter}</div>`;
+
+        const webSiteHtml = app.WebSite 
+            ? ` <a href="${escapeHtml(app.WebSite)}" target="_blank" class="publisher-link" title="Visitar site: ${escapeHtml(app.WebSite)}" onclick="event.stopPropagation()">🌐</a>` 
+            : '';
 
         tr.innerHTML = `
             <td class="text-center">
@@ -334,15 +343,16 @@ function renderTable() {
             </td>
             <td>
                 <div class="app-info-cell">
-                    <div class="app-icon-fallback">${initialLetter}</div>
+                    ${iconHtml}
                     <div class="app-names">
                         <span class="app-display-name">${escapeHtml(app.DisplayName)}</span>
-                        <span class="app-publisher">${escapeHtml(app.Publisher || 'Fabricante não informado')}</span>
+                        <span class="app-publisher">${escapeHtml(app.Publisher || 'Fabricante não informado')}${webSiteHtml}</span>
                     </div>
                 </div>
             </td>
             <td>${escapeHtml(app.DisplayVersion || '--')}</td>
             <td>${sizeFormatted}</td>
+            <td><span class="badge-arch ${archBadge}">${escapeHtml(app.Architecture || '64-bit')}</span></td>
             <td>${dateFormatted}</td>
             <td><span class="badge-installer ${badgeClass}">${escapeHtml(app.InstallerType)}</span></td>
             <td>

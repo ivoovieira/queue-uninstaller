@@ -30,40 +30,53 @@ $forbiddenKeys = @(
     "HKEY_LOCAL_MACHINE\Software\Wow6432Node", "HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft"
 ) | ForEach-Object { $_.ToLower() }
 
+$genericPublishers = @("microsoft", "google", "apple", "adobe", "oracle", "intel", "amd", "nvidia")
+
 # Limpeza e extração de termos de busca
 $cleanName = ($DisplayName -replace '[^a-zA-Z0-9_\-\s]', '').Trim()
 $searchTerms = [System.Collections.Generic.List[string]]::new()
 
 if ($cleanName.Length -ge 3) {
-    # remove versões comuns como "6.5.6", "2024", etc.
+    # remove versões comuns como "2.5.1", "6.5.6", etc.
     $baseName = ($cleanName -replace '\b\d+(\.\d+)*\b', '').Trim()
-    if ($baseName.Length -ge 3) { $searchTerms.Add($baseName) }
-    $searchTerms.Add($cleanName)
+    if ($baseName.Length -ge 3 -and -not ($searchTerms -contains $baseName)) { $searchTerms.Add($baseName) }
+    if (-not ($searchTerms -contains $cleanName)) { $searchTerms.Add($cleanName) }
 }
 
 if ($RegistryId -and $RegistryId.Trim().Length -ge 4) {
     $searchTerms.Add($RegistryId.Trim())
 }
 
+# Termos do fabricante (se não for empresa genérica do SO)
+$pubTerm = ($Publisher -replace '[^a-zA-Z0-9_\-\s]', '').Trim()
+if ($pubTerm.Length -ge 3 -and -not ($genericPublishers -contains $pubTerm.ToLower())) {
+    if (-not ($searchTerms -contains $pubTerm)) {
+        $searchTerms.Add($pubTerm)
+    }
+}
+
 $foundRegistry = [System.Collections.Generic.List[object]]::new()
 $foundFileSystem = [System.Collections.Generic.List[object]]::new()
 
 # 1. Checar InstallLocation diretamente
-if ($InstallLocation -and (Test-Path $InstallLocation)) {
-    $normLoc = $InstallLocation.TrimEnd('\').ToLower()
-    if (-not ($forbiddenFolders -contains $normLoc)) {
-        try {
-            $fCount = (Get-ChildItem -Path $InstallLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-            $fSize = (Get-ChildItem -Path $InstallLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-            $foundFileSystem.Add([PSCustomObject]@{
-                Type = "Folder"
-                Path = $InstallLocation
-                Description = "Diretório de Instalação original"
-                ItemsCount = $fCount
-                SizeBytes = [int64]$fSize
-                Selected = $true
-            })
-        } catch {}
+if ($InstallLocation) {
+    $normLocation = $InstallLocation.Trim('"').Trim()
+    if (Test-Path $normLocation) {
+        $normLocLower = $normLocation.TrimEnd('\').ToLower()
+        if (-not ($forbiddenFolders -contains $normLocLower)) {
+            try {
+                $fCount = (Get-ChildItem -Path $normLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                $fSize = (Get-ChildItem -Path $normLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                $foundFileSystem.Add([PSCustomObject]@{
+                    Type = "Folder"
+                    Path = $normLocation
+                    Description = "Diretório de Instalação original"
+                    ItemsCount = $fCount
+                    SizeBytes = [int64]$fSize
+                    Selected = $true
+                })
+            } catch {}
+        }
     }
 }
 
@@ -129,7 +142,7 @@ foreach ($dir in $shortcutDirs) {
     }
 }
 
-# 4. Varrer Registro do Windows
+# 4. Varrer Chaves de Software no Registro (HKCU, HKLM, WOW6432Node)
 $regHives = @(
     "HKCU:\Software",
     "HKLM:\Software",
@@ -151,6 +164,7 @@ foreach ($hive in $regHives) {
                         Hive = $hive
                         KeyPath = $fullReg
                         PSPath = $candidateKey
+                        ValueName = ""
                         SubKeyCount = $keyObj.SubKeyCount
                         ValueCount = $keyObj.ValueCount
                         Description = "Chave de software em $hive"
@@ -162,7 +176,45 @@ foreach ($hive in $regHives) {
     }
 }
 
-# 5. Checar se a chave do Uninstall ainda existe
+# 5. Varrer Registros de Compatibilidade, Telemetria e Cache do Explorer (Estilo Revo)
+$traceLocations = @(
+    @{ Path = "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"; Desc = "Registro de Compatibilidade do Windows" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched"; Desc = "Histórico de Execução de Janelas do Explorer" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\ShowJumpView"; Desc = "Histórico de Atalhos do Menu Iniciar" },
+    @{ Path = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"; Desc = "Cache de Interface do Shell do Windows" }
+)
+
+foreach ($loc in $traceLocations) {
+    $p = $loc.Path
+    if (Test-Path $p) {
+        $props = Get-ItemProperty -Path $p -ErrorAction SilentlyContinue
+        if ($props) {
+            foreach ($prop in $props.PSObject.Properties) {
+                $pName = [string]$prop.Name
+                $pVal = [string]$prop.Value
+                foreach ($term in $searchTerms) {
+                    if ($pName.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -or 
+                        $pVal.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                        
+                        $foundRegistry.Add([PSCustomObject]@{
+                            Hive = "HKCU"
+                            KeyPath = "$p -> $pName"
+                            PSPath = $p
+                            ValueName = $pName
+                            SubKeyCount = 0
+                            ValueCount = 1
+                            Description = $loc.Desc
+                            Selected = $true
+                        })
+                        break
+                    }
+                }
+            }
+        }
+    }
+}
+
+# 6. Checar se a chave do Uninstall ainda existe
 $uninstallHives = @(
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -178,6 +230,7 @@ if ($RegistryId) {
                     Hive = $uHive
                     KeyPath = $uObj.Name
                     PSPath = $uPath
+                    ValueName = ""
                     SubKeyCount = $uObj.SubKeyCount
                     ValueCount = $uObj.ValueCount
                     Description = "Entrada residual no Painel de Controle / Desinstalação"
