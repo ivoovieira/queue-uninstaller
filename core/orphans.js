@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 function scanOrphans(onProgress) {
     return new Promise((resolve) => {
@@ -62,13 +64,26 @@ function scanOrphans(onProgress) {
 function cleanOrphans(items) {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'clean_orphaned_residuals.ps1');
-        const jsonStr = JSON.stringify(items);
+        const tempJsonFile = path.join(os.tmpdir(), `queu_clean_orphans_${Date.now()}.json`);
+
+        try {
+            fs.writeFileSync(tempJsonFile, JSON.stringify(items || []), 'utf8');
+        } catch (e) {
+            console.error('Erro ao salvar arquivo temporário de órfãos:', e);
+            return resolve({
+                Success: false,
+                RemovedCount: 0,
+                RemovedBytes: 0,
+                RemovedItems: [],
+                Errors: [`Falha ao salvar dados temporários: ${e.message}`]
+            });
+        }
 
         const child = spawn('powershell.exe', [
             '-NoProfile',
             '-ExecutionPolicy', 'Bypass',
             '-File', scriptPath,
-            '-ItemsJson', jsonStr
+            '-JsonPath', tempJsonFile
         ], { windowsHide: true });
 
         let stdout = '';
@@ -78,6 +93,12 @@ function cleanOrphans(items) {
         child.stderr.on('data', (d) => { stderr += d.toString('utf8'); });
 
         child.on('close', (code) => {
+            try {
+                if (fs.existsSync(tempJsonFile)) {
+                    fs.unlinkSync(tempJsonFile);
+                }
+            } catch (e) {}
+
             try {
                 const jsonStart = stdout.indexOf('{');
                 if (jsonStart !== -1) {

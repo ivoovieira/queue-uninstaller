@@ -1503,18 +1503,11 @@ async function cleanSelectedOrphans() {
             const freed = result.RemovedBytes > 0 ? ` (~${formatSize(result.RemovedBytes)} liberados)` : '';
             showToast(`${result.RemovedCount} resíduos limpos com sucesso!${freed}`, 'success');
 
-            const removedPaths = new Set(selected.map(s => s.Path));
-            orphanItems = orphanItems.filter(item => !removedPaths.has(item.Path));
-            updateOrphanStats({
-                TotalCount: orphanItems.length,
-                TotalSizeBytes: orphanItems.reduce((acc, i) => acc + (i.SizeBytes || 0), 0),
-                SafeCount: orphanItems.filter(i => i.Risk === 'Safe').length,
-                ReviewCount: orphanItems.filter(i => i.Risk === 'Review').length
-            });
-            renderOrphanItems();
-            document.getElementById('orphanStatusText').textContent = 'Limpeza concluída com sucesso!';
+            // Dispara imediatamente uma nova varredura de resíduos para que a tabela atualize na hora e os itens apagados sumam da tela
+            await runOrphanScan();
         } else {
             showToast('Alguns itens não puderam ser removidos.', 'error');
+            await runOrphanScan();
         }
     } catch (e) {
         showToast(`Erro na limpeza: ${e.message}`, 'error');

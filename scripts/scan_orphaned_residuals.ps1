@@ -38,6 +38,37 @@ $systemWhitelist = @(
     "denuvo", "anticheat", "easyanticheat", "battleye", "vanguard", "faceit", "punkbuster", "eac"
 )
 
+# Filtro Rígido de Ocultação Pré-Varredura (Blacklist de Exclusão da Varredura)
+$ignorePatterns = @(
+    # Drivers de Vídeo e Áudio
+    "ati", "radeon", "amd", "nvidia", "intel", "realtek", "synaptics",
+    # Bibliotecas de Renderização e Gráficos Essenciais
+    "khronos", "vulkan", "directx", "opengl",
+    # Subsistemas Anti-Cheat e Segurança de Jogos
+    "denuvo", "anticheat", "easyanticheat", "battleye", "ea\ac", "anticheatexpert",
+    # Plataformas Ativas de Jogos
+    "epic games", "epicgameslauncher", "valve", "steam", "origin", "ubisoft", "gog.com", "rockstar games", "riot games",
+    # Segurança do Windows e Criptografia
+    "windows defender", "microsoft", "cryptography", "credentials"
+)
+
+function Should-IgnoreItem($itemPath, $itemName) {
+    $combined = "$itemPath\$itemName".ToLower()
+    foreach ($pat in $ignorePatterns) {
+        if ($pat.Length -le 3) {
+            # Evita casar com palavras normais (ex: 'application' contendo 'ati')
+            if ($combined -match "(?i)(^|[\\/._\s-])$([regex]::Escape($pat))([\\/._\s-]|$)") {
+                return $true
+            }
+        } else {
+            if ($combined.Contains($pat)) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 function Is-SystemWhitelisted($name) {
     if (-not $name) { return $true }
     $n = $name.ToLower().Trim()
@@ -308,6 +339,7 @@ foreach ($apHive in $appPathsHives) {
         }
 
         if ($targetExe) {
+            if (Should-IgnoreItem $sk.PSPath $sk.PSChildName) { continue }
             $exeExists = $false
             try {
                 if (Test-Path -Path $targetExe -PathType Leaf) { $exeExists = $true }
@@ -342,6 +374,7 @@ foreach ($pr in $progRoots) {
     if (-not (Test-Path $pr)) { continue }
     $dirs = Get-ChildItem -Path $pr -Directory -ErrorAction SilentlyContinue
     foreach ($d in $dirs) {
+        if (Should-IgnoreItem $d.FullName $d.Name) { continue }
         $dLower = $d.Name.ToLower()
         if (Is-SystemWhitelisted $d.Name) { continue }
         if ($forbiddenFolders -contains $d.FullName.ToLower()) { continue }
@@ -382,6 +415,7 @@ $squirrelTemp = "$env:LOCALAPPDATA\SquirrelTemp"
 if (Test-Path $squirrelTemp) {
     $sqItems = Get-ChildItem -Path $squirrelTemp -ErrorAction SilentlyContinue
     foreach ($sq in $sqItems) {
+        if (Should-IgnoreItem $sq.FullName $sq.Name) { continue }
         $sqSize = if ($sq.PSIsContainer) {
             (Get-ChildItem -Path $sq.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
         } else { $sq.Length }
@@ -411,6 +445,7 @@ foreach ($rHive in $regScanHives) {
     $vendorKeys = Get-ChildItem -Path $rHive -ErrorAction SilentlyContinue
     foreach ($vk in $vendorKeys) {
         $vkName = $vk.PSChildName
+        if (Should-IgnoreItem $vk.PSPath $vkName) { continue }
         if ($vkName -eq 'WOW6432Node' -or (Is-SystemWhitelisted $vkName)) { continue }
         if ($installedTokens.Contains($vkName)) { continue }
 
@@ -422,6 +457,7 @@ foreach ($rHive in $regScanHives) {
         if ($subDirs) {
             foreach ($sub in $subDirs) {
                 $subName = $sub.PSChildName
+                if (Should-IgnoreItem $sub.PSPath "$vkName\$subName") { continue }
                 if (Is-SystemWhitelisted $subName) { continue }
                 if ($installedTokens.Contains($subName)) { continue }
 
@@ -463,6 +499,7 @@ foreach ($rHive in $regScanHives) {
                 }
 
                 if (-not $hasValidPath) {
+                    if (Should-IgnoreItem $sub.PSPath "$vkName\$subName") { continue }
                     $foundItems.Add([PSCustomObject]@{
                         Id = "orphan_$itemIdCounter"
                         Name = "$vkName\$subName"
@@ -492,6 +529,7 @@ foreach ($adRoot in $appDataRoots) {
     $dirs = Get-ChildItem -Path $adRoot -Directory -ErrorAction SilentlyContinue
     foreach ($d in $dirs) {
         $dName = $d.Name
+        if (Should-IgnoreItem $d.FullName $dName) { continue }
         if (Is-SystemWhitelisted $dName) { continue }
         if ($forbiddenFolders -contains $d.FullName.ToLower()) { continue }
 
@@ -513,6 +551,7 @@ foreach ($adRoot in $appDataRoots) {
             $fCount = (Get-ChildItem -Path $d.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
             $fSize = (Get-ChildItem -Path $d.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
 
+            if (Should-IgnoreItem $d.FullName $d.Name) { continue }
             $foundItems.Add([PSCustomObject]@{
                 Id = "orphan_$itemIdCounter"
                 Name = $d.Name
