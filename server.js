@@ -6,6 +6,7 @@ const { getInstalledApps } = require('./core/inventory');
 const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
+const { scanOrphans, cleanOrphans } = require('./core/orphans');
 
 const PORT = 38456;
 let sseClients = [];
@@ -129,6 +130,34 @@ const server = http.createServer(async (req, res) => {
         isBatchCancelled = true;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ cancelled: true }));
+    }
+
+    if (pathname === '/api/scan-orphans' && req.method === 'GET') {
+        try {
+            const result = await scanOrphans();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify(result));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    if (pathname === '/api/clean-orphans' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const items = JSON.parse(body || '[]');
+                const result = await cleanOrphans(items);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
     }
 
     if (pathname === '/api/batch' && req.method === 'POST') {

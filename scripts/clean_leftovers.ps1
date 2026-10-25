@@ -34,7 +34,69 @@ $removedRegistry = [System.Collections.Generic.List[string]]::new()
 $removedFirewall = [System.Collections.Generic.List[string]]::new()
 $errors = [System.Collections.Generic.List[string]]::new()
 
-# 1. Deletar arquivos e pastas (com envio seguro para a Lixeira)
+function Remove-ResidualFileSystemItem($targetPath) {
+    if (-not (Test-Path $targetPath)) { return $null }
+
+    # 1. Se contiver DLLs ou for uma DLL, desregistrar do Explorer via regsvr32
+    $isDir = (Get-Item $targetPath) -is [System.IO.DirectoryInfo]
+    if ($isDir) {
+        $dlls = Get-ChildItem -Path $targetPath -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue
+        foreach ($dll in $dlls) {
+            try {
+                Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$($dll.FullName)`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+            } catch {}
+        }
+    } elseif ($targetPath -like "*.dll") {
+        try {
+            Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$targetPath`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+        } catch {}
+    }
+
+    # 2. Tentar exclusão segura via Lixeira
+    try {
+        if ($isDir) {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($targetPath, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        } else {
+            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($targetPath, 'OnlyErrorDialogs', 'SendToRecycleBin')
+        }
+        return "enviado à Lixeira"
+    } catch {
+        # 3. Fallback para exclusão direta
+        try {
+            Remove-Item -Path $targetPath -Recurse -Force -ErrorAction Stop
+            return "excluído diretamente"
+        } catch {
+            $firstErr = $_.Exception.Message
+            # 4. Se falhar por bloqueio de arquivo (Explorer lock / Shell extension), reiniciar momentaneamente explorer.exe
+            try {
+                Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 800
+                Start-Process explorer.exe -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 1000
+
+                Remove-Item -Path $targetPath -Recurse -Force -ErrorAction Stop
+                return "excluído após desbloqueio do Explorer"
+            } catch {
+                # 5. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
+                try {
+                    $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
+                    if (Test-Path $sessionMgr) {
+                        $existing = (Get-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue).PendingFileRenameOperations
+                        $pfrList = [System.Collections.Generic.List[string]]::new()
+                        if ($existing) { $pfrList.AddRange($existing) }
+                        $pfrList.Add("\??\$targetPath")
+                        $pfrList.Add("")
+                        Set-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -Value $pfrList.ToArray() -Type MultiString -Force -ErrorAction SilentlyContinue
+                        return "agendado para exclusão no próximo boot"
+                    }
+                } catch {}
+                throw [System.Exception]::new("Arquivo travado ($firstErr) : $($_.Exception.Message)")
+            }
+        }
+    }
+}
+
+# 1. Deletar arquivos e pastas (com envio seguro para a Lixeira e liberação de DLLs)
 if ($data.FileSystemLeftovers) {
     foreach ($item in $data.FileSystemLeftovers) {
         $p = $item.Path
@@ -47,21 +109,27 @@ if ($data.FileSystemLeftovers) {
 
         if (Test-Path $p) {
             try {
-                $isDir = (Get-Item $p) -is [System.IO.DirectoryInfo]
-                if ($isDir) {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
-                } else {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                $statusMsg = Remove-ResidualFileSystemItem $p
+                if ($statusMsg) {
+                    $removedFiles.Add("$p ($statusMsg)")
                 }
-                $removedFiles.Add("$p (enviado à Lixeira)")
+
+                # Se a pasta-mãe de fabricante ficou órfã e vazia, removê-la com segurança
+                $parentDir = Split-Path -Path $p -Parent
+                if ($parentDir -and (Test-Path $parentDir)) {
+                    $normParent = $parentDir.TrimEnd('\').ToLower()
+                    if (-not ($forbiddenFolders -contains $normParent)) {
+                        $remaining = Get-ChildItem -Path $parentDir -Force -ErrorAction SilentlyContinue
+                        if (-not $remaining -or $remaining.Count -eq 0) {
+                            try {
+                                Remove-Item -Path $parentDir -Force -Recurse -ErrorAction SilentlyContinue
+                                $removedFiles.Add("$parentDir (pasta de fabricante vazia limpa)")
+                            } catch {}
+                        }
+                    }
+                }
             } catch {
-                # Fallback para exclusão direta se a Lixeira falhar
-                try {
-                    Remove-Item -Path $p -Recurse -Force -ErrorAction Stop
-                    $removedFiles.Add($p)
-                } catch {
-                    $errors.Add("Falha ao remover arquivo/pasta $p : $($_.Exception.Message)")
-                }
+                $errors.Add("Falha ao remover arquivo/pasta $p : $($_.Exception.Message)")
             }
         }
     }
@@ -96,6 +164,24 @@ if ($data.RegistryLeftovers) {
                 try {
                     Remove-Item -Path $psPath -Recurse -Force -ErrorAction Stop
                     $removedRegistry.Add($psPath)
+
+                    # Verificar chave-mãe de fabricante: se ficou com 0 subchaves e 0 valores, remove
+                    $parentRegKey = $reg.ParentKey
+                    if (-not $parentRegKey) {
+                        $parentRegKey = Split-Path -Path $psPath -Parent
+                    }
+                    if ($parentRegKey -and (Test-Path $parentRegKey)) {
+                        $normParentKey = $parentRegKey.ToLower()
+                        if (-not ($forbiddenKeys -contains $normParentKey)) {
+                            $parentObj = Get-Item -Path $parentRegKey -ErrorAction SilentlyContinue
+                            if ($parentObj -and $parentObj.SubKeyCount -eq 0 -and $parentObj.ValueCount -eq 0) {
+                                try {
+                                    Remove-Item -Path $parentRegKey -Force -ErrorAction SilentlyContinue
+                                    $removedRegistry.Add("$parentRegKey (chave de fabricante vazia limpa)")
+                                } catch {}
+                            }
+                        }
+                    }
                 } catch {
                     $errors.Add("Falha ao remover chave do registro $psPath : $($_.Exception.Message)")
                 }

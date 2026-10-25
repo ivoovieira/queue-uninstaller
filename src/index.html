@@ -14,7 +14,7 @@
                 <img src="icon.png" class="ribbon-logo" alt="Queu" onerror="this.style.display='none'">
                 <div>
                     <h1 class="brand-title">Queu <span>Uninstaller</span></h1>
-                    <span class="brand-version">v1.2.3</span>
+                    <span class="brand-version">v1.3.0</span>
                 </div>
             </div>
 
@@ -58,6 +58,15 @@
                         </svg>
                     </div>
                     <span>Ponto Restauração</span>
+                </button>
+
+                <button id="btnOrphanScanner" class="ribbon-btn" title="Escanear e limpar resíduos órfãos deixados por programas antigos">
+                    <div class="r-icon">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+                        </svg>
+                    </div>
+                    <span>Resíduos Órfãos</span>
                 </button>
 
                 <button id="btnRefresh" class="ribbon-btn" title="Recarregar e atualizar lista">
@@ -328,6 +337,107 @@
                 </div>
                 <div class="modal-footer">
                     <button id="btnSaveOptions" class="btn btn-primary">Salvar e Fechar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Safety Confirmation Modal Before Batch Uninstall -->
+        <div id="batchConfirmModal" class="modal-overlay hidden">
+            <div class="modal-content batch-confirm-modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2>Confirmar Desinstalação em Fila</h2>
+                        <p>Tem certeza que deseja desinstalar estes <b id="confirmBatchCount" style="color: var(--accent-red);">0</b> programas?</p>
+                    </div>
+                    <button id="btnCloseBatchConfirm" class="btn-close">&times;</button>
+                </div>
+
+                <div class="batch-confirm-body">
+                    <div class="batch-confirm-info-strip">
+                        <span>Espaço total estimado a ser liberado: <b id="confirmBatchSize">0 MB</b></span>
+                        <span class="batch-confirm-notice">🛡️ Um Ponto de Restauração será criado e os resíduos serão verificados e limpos com segurança.</span>
+                    </div>
+                    <div id="confirmBatchList" class="batch-confirm-list"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="btnCancelBatchConfirm" class="btn btn-secondary">Cancelar</button>
+                    <button id="btnProceedBatch" class="btn btn-danger">Confirmar e Desinstalar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Standalone Residual Scanner Modal (Resíduos Órfãos) -->
+        <div id="orphanModal" class="modal-overlay hidden">
+            <div class="modal-content orphan-modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2>Varredura de Resíduos Órfãos no Sistema</h2>
+                        <p>Localize e remova chaves obsoletas do Registro, entradas inválidas de App Paths e pastas abandonadas de programas antigos</p>
+                    </div>
+                    <button id="btnCloseOrphanModal" class="btn-close">&times;</button>
+                </div>
+
+                <div class="orphan-stats-strip">
+                    <div class="orphan-stat-box">
+                        <span>Itens Encontrados:</span> <b id="orphanFoundCount">0</b>
+                    </div>
+                    <div class="orphan-stat-box">
+                        <span>Espaço Estimado:</span> <b id="orphanFoundSize">0 B</b>
+                    </div>
+                    <div class="orphan-stat-box">
+                        <span>Seguros:</span> <b id="orphanSafeCount" style="color: #4ade80;">0</b>
+                    </div>
+                    <div class="orphan-stat-box">
+                        <span>Requer Revisão:</span> <b id="orphanReviewCount" style="color: #facc15;">0</b>
+                    </div>
+                    <div class="orphan-stat-box" style="margin-left: auto;">
+                        <span id="orphanStatusText" style="color: var(--text-muted);">Pronto para verificar</span>
+                    </div>
+                </div>
+
+                <div class="orphan-controls-bar">
+                    <div class="orphan-filter-chips">
+                        <button class="orphan-filter-btn active" data-orphan-filter="all">Todos</button>
+                        <button class="orphan-filter-btn" data-orphan-filter="safe">🟢 Seguros</button>
+                        <button class="orphan-filter-btn" data-orphan-filter="review">🟡 Requer Revisão</button>
+                    </div>
+
+                    <div class="orphan-actions-right">
+                        <button id="btnOrphanSelectAll" class="btn-text">Selecionar Todos</button>
+                        <button id="btnOrphanSelectSafe" class="btn-text">Selecionar Seguros</button>
+                        <button id="btnOrphanDeselectAll" class="btn-text">Desmarcar</button>
+                    </div>
+                </div>
+
+                <div id="orphanScanLoading" class="orphan-scan-progress hidden">
+                    <div class="spinner"></div>
+                    <h3 id="orphanProgressTitle">Varrendo resíduos órfãos no sistema...</h3>
+                    <p id="orphanProgressSub" style="color: var(--text-muted); font-size: 0.85rem;">Examinando App Paths, pastas em Program Files, AppData e Registro...</p>
+                </div>
+
+                <div id="orphanListContainer" class="orphan-list-container">
+                    <div style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+                        Clique em "Iniciar Varredura" para procurar resíduos de softwares e jogos antigos no Windows.
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button id="btnStartOrphanScan" class="btn btn-secondary">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Iniciar Varredura
+                    </button>
+                    <div style="margin-left: auto; display: flex; gap: 8px;">
+                        <button id="btnCancelOrphan" class="btn btn-secondary">Fechar</button>
+                        <button id="btnCleanSelectedOrphans" class="btn btn-danger" disabled>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Excluir Resíduos Selecionados
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

@@ -795,33 +795,316 @@ body {
 
 .toast-container {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 200;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse; /* novos toasts sobem suavemente sem cobrir botoes superiores */
     gap: 8px;
+    align-items: center;
+    pointer-events: none;
 }
 
 .toast {
-    padding: 10px 16px;
+    pointer-events: auto;
+    padding: 10px 18px;
     border-radius: var(--radius-sm);
     background-color: var(--bg-surface-elevated);
     border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-lg);
-    font-size: 0.82rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    font-size: 0.85rem;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 8px;
-    animation: slideInRight 0.2s ease;
+    gap: 10px;
+    animation: slideUpFade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .toast.success { border-color: var(--accent-green); }
 .toast.error { border-color: var(--accent-red); }
 .toast.info { border-color: #3b82f6; }
 
-@keyframes slideInRight {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
+@keyframes slideUpFade {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ==========================================================================
+   Safety Confirmation Modal (Batch Pre-Uninstall)
+   ========================================================================== */
+.batch-confirm-modal-content {
+    max-width: 640px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+}
+
+.batch-confirm-body {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.batch-confirm-info-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.batch-confirm-notice {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.batch-confirm-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-surface);
+    display: flex;
+    flex-direction: column;
+}
+
+.batch-confirm-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.15s ease;
+}
+
+.batch-confirm-item:last-child {
+    border-bottom: none;
+}
+
+.batch-confirm-item:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.batch-confirm-app-icon {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.batch-confirm-app-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.batch-confirm-app-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.batch-confirm-app-meta {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.batch-confirm-app-size {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* ==========================================================================
+   Standalone Residual Scanner Modal (Resíduos Órfãos)
+   ========================================================================== */
+.orphan-modal-content {
+    max-width: 860px;
+    width: 92%;
+    display: flex;
+    flex-direction: column;
+    max-height: 88vh;
+}
+
+.orphan-stats-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px 20px;
+    background-color: var(--bg-surface-elevated);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.84rem;
+}
+
+.orphan-stat-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.orphan-controls-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-surface);
+}
+
+.orphan-filter-chips {
+    display: flex;
+    gap: 8px;
+}
+
+.orphan-filter-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.orphan-filter-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.orphan-filter-btn.active {
+    background-color: var(--accent-blue-soft, rgba(59, 130, 246, 0.15));
+    border-color: #3b82f6;
+    color: #fff;
+    font-weight: 600;
+}
+
+.orphan-actions-right {
+    display: flex;
+    gap: 8px;
+}
+
+.orphan-list-container {
+    padding: 12px 20px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 280px;
+    max-height: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.orphan-item-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s ease;
+}
+
+.orphan-item-card:hover {
+    border-color: var(--text-muted);
+}
+
+.orphan-item-card input[type="checkbox"] {
+    margin-top: 4px;
+    cursor: pointer;
+}
+
+.orphan-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.orphan-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.orphan-item-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.orphan-risk-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.orphan-risk-badge.safe {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.orphan-risk-badge.review {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.orphan-item-reason {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.orphan-item-path {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-family: monospace;
+    word-break: break-all;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.orphan-item-size {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    align-self: center;
+}
+
+.orphan-scan-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 30px 20px;
+    align-items: center;
+    text-align: center;
 }

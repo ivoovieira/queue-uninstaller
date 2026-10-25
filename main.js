@@ -7,6 +7,7 @@ const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
 const { checkForUpdates, applyUpdate } = require('./core/updater');
+const { scanOrphans, cleanOrphans } = require('./core/orphans');
 
 let mainWindow = null;
 let isBatchCancelled = false;
@@ -166,6 +167,34 @@ function startInternalServer() {
             const result = await applyUpdate();
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             return res.end(JSON.stringify(result));
+        }
+
+        if (pathname === '/api/scan-orphans' && req.method === 'GET') {
+            try {
+                const result = await scanOrphans();
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify(result));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: err.message }));
+            }
+        }
+
+        if (pathname === '/api/clean-orphans' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const items = JSON.parse(body || '[]');
+                    const result = await cleanOrphans(items);
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify(result));
+                } catch (err) {
+                    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
+            return;
         }
 
         if (pathname === '/api/batch' && req.method === 'POST') {
@@ -355,6 +384,14 @@ ipcMain.handle('start-batch-uninstall', async (event, apps, options = {}) => {
 
 ipcMain.handle('check-for-updates', async () => {
     return await checkForUpdates();
+});
+
+ipcMain.handle('scan-orphans', async () => {
+    return await scanOrphans();
+});
+
+ipcMain.handle('clean-orphans', async (event, items) => {
+    return await cleanOrphans(items);
 });
 
 ipcMain.handle('apply-update', async () => {

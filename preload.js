@@ -10,6 +10,8 @@ const api = {
     startBatchUninstall: (apps, options) => ipcRenderer.invoke('start-batch-uninstall', apps, options),
     cancelBatch: () => ipcRenderer.invoke('cancel-batch'),
     openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
+    scanOrphans: () => ipcRenderer.invoke('scan-orphans'),
+    cleanOrphans: (items) => ipcRenderer.invoke('clean-orphans', items),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     applyUpdate: () => ipcRenderer.invoke('apply-update'),
     

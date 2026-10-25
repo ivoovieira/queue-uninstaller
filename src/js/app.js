@@ -45,6 +45,12 @@ if (!window.api || !window.api.getInstalledApps) {
             body: JSON.stringify({ apps, options })
         }).then(r => r.json()),
         cancelBatch: () => fetch(`${API_BASE}/api/cancel-batch`, { method: 'POST' }).then(r => r.json()),
+        scanOrphans: () => fetch(`${API_BASE}/api/scan-orphans`).then(r => r.json()),
+        cleanOrphans: (items) => fetch(`${API_BASE}/api/clean-orphans`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(items)
+        }).then(r => r.json()),
         checkForUpdates: () => fetch(`${API_BASE}/api/check-update`).then(r => r.json()),
         applyUpdate: () => fetch(`${API_BASE}/api/apply-update`, { method: 'POST' }).then(r => r.json()),
         openFolder: () => {},
@@ -213,11 +219,38 @@ function setupEventListeners() {
 
     // Botão Desinstalar Fila no Header
     document.getElementById('btnHeaderBatch').addEventListener('click', () => {
-        if (selectedAppIds.size === 0) {
-            showToast('Nenhum programa selecionado. Marque os programas que deseja desinstalar na fila.', 'info');
-            return;
-        }
+        openBatchConfirmModal();
+    });
+
+    // Modal de Confirmação Pré-Desinstalação em Fila
+    document.getElementById('btnCancelBatchConfirm').addEventListener('click', () => {
+        document.getElementById('batchConfirmModal').classList.add('hidden');
+    });
+    document.getElementById('btnCloseBatchConfirm').addEventListener('click', () => {
+        document.getElementById('batchConfirmModal').classList.add('hidden');
+    });
+    document.getElementById('btnProceedBatch').addEventListener('click', () => {
+        document.getElementById('batchConfirmModal').classList.add('hidden');
         executeBatch();
+    });
+
+    // Standalone Residual Scanner (Resíduos Órfãos)
+    document.getElementById('btnOrphanScanner').addEventListener('click', openOrphanModal);
+    document.getElementById('btnCloseOrphanModal').addEventListener('click', closeOrphanModal);
+    document.getElementById('btnCancelOrphan').addEventListener('click', closeOrphanModal);
+    document.getElementById('btnStartOrphanScan').addEventListener('click', runOrphanScan);
+    document.getElementById('btnCleanSelectedOrphans').addEventListener('click', cleanSelectedOrphans);
+    document.getElementById('btnOrphanSelectAll').addEventListener('click', () => setOrphanSelection('all'));
+    document.getElementById('btnOrphanSelectSafe').addEventListener('click', () => setOrphanSelection('safe'));
+    document.getElementById('btnOrphanDeselectAll').addEventListener('click', () => setOrphanSelection('none'));
+
+    document.querySelectorAll('.orphan-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.orphan-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentOrphanFilter = btn.dataset.orphanFilter;
+            renderOrphanItems();
+        });
     });
 
     // Modal de Opções com Persistência
@@ -280,7 +313,7 @@ function setupEventListeners() {
     });
 
     // Fila de desinstalação
-    btnStartBatch.addEventListener('click', executeBatch);
+    btnStartBatch.addEventListener('click', openBatchConfirmModal);
     btnAbortBatch.addEventListener('click', async () => {
         btnAbortBatch.disabled = true;
         btnAbortBatch.textContent = 'Cancelando...';
@@ -605,6 +638,49 @@ function updateBatchBar() {
         </svg>
         Desinstalar Fila (${count})
     `;
+}
+
+// Modal de Confirmação Pré-Desinstalação em Fila (Safety Confirmation)
+function openBatchConfirmModal() {
+    const selectedApps = allApps.filter(a => selectedAppIds.has(a.Id));
+    if (selectedApps.length === 0) {
+        showToast('Nenhum programa selecionado. Marque os programas que deseja desinstalar na fila.', 'info');
+        return;
+    }
+    const count = selectedApps.length;
+    const totalKb = selectedApps.reduce((acc, a) => acc + (a.EstimatedSizeKb || 0), 0);
+    const sizeStr = totalKb > 0 ? formatSize(totalKb * 1024) : '0 MB';
+
+    document.getElementById('confirmBatchCount').textContent = count;
+    document.getElementById('confirmBatchSize').textContent = sizeStr;
+
+    const listContainer = document.getElementById('confirmBatchList');
+    listContainer.innerHTML = '';
+
+    selectedApps.forEach(app => {
+        const item = document.createElement('div');
+        item.className = 'batch-confirm-item';
+
+        const iconHtml = app.IconBase64
+            ? `<img src="data:image/png;base64,${app.IconBase64}" class="batch-confirm-app-icon" alt="">`
+            : `<div class="app-icon-placeholder" style="width: 28px; height: 28px; font-size: 0.8rem;">${(app.DisplayName || '?')[0].toUpperCase()}</div>`;
+
+        const appSize = (app.EstimatedSizeKb && app.EstimatedSizeKb > 0)
+            ? formatSize(app.EstimatedSizeKb * 1024)
+            : '--';
+
+        item.innerHTML = `
+            ${iconHtml}
+            <div class="batch-confirm-app-details">
+                <div class="batch-confirm-app-name">${escapeHtml(app.DisplayName)}</div>
+                <div class="batch-confirm-app-meta">${escapeHtml(app.Publisher || 'Fabricante não informado')} • v${escapeHtml(app.DisplayVersion || 'N/A')}</div>
+            </div>
+            <div class="batch-confirm-app-size">${appSize}</div>
+        `;
+        listContainer.appendChild(item);
+    });
+
+    document.getElementById('batchConfirmModal').classList.remove('hidden');
 }
 
 // Execução da Fila em Lote (Batch Queue)
@@ -954,8 +1030,8 @@ function showToast(message, type = 'info') {
     container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        setTimeout(() => toast.remove(), 300);
+        toast.style.transform = 'translateY(15px)';
+        setTimeout(() => toast.remove(), 250);
     }, 4000);
 }
 
@@ -967,4 +1043,179 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// ==============================================================================
+// Módulo de Varredura de Resíduos Órfãos (Standalone Residual Scanner)
+// ==============================================================================
+let orphanItems = [];
+let currentOrphanFilter = 'all';
+
+function openOrphanModal() {
+    document.getElementById('orphanModal').classList.remove('hidden');
+    if (orphanItems.length === 0) {
+        runOrphanScan();
+    }
+}
+
+function closeOrphanModal() {
+    document.getElementById('orphanModal').classList.add('hidden');
+}
+
+async function runOrphanScan() {
+    const loading = document.getElementById('orphanScanLoading');
+    const listContainer = document.getElementById('orphanListContainer');
+    const btnClean = document.getElementById('btnCleanSelectedOrphans');
+    const statusText = document.getElementById('orphanStatusText');
+
+    loading.classList.remove('hidden');
+    listContainer.innerHTML = '';
+    btnClean.disabled = true;
+    statusText.textContent = 'Verificando resíduos órfãos...';
+
+    try {
+        const result = await window.api.scanOrphans();
+        orphanItems = result.Items || [];
+        updateOrphanStats(result);
+        renderOrphanItems();
+        statusText.textContent = `Varredura concluída (${orphanItems.length} resíduos encontrados)`;
+    } catch (e) {
+        listContainer.innerHTML = `
+            <div style="text-align: center; color: var(--accent-red); padding: 30px;">
+                Erro ao varrer resíduos órfãos: ${escapeHtml(e.message)}
+            </div>
+        `;
+        statusText.textContent = 'Erro na varredura';
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
+
+function updateOrphanStats(res) {
+    const totalCount = res.TotalCount !== undefined ? res.TotalCount : orphanItems.length;
+    const totalBytes = res.TotalSizeBytes !== undefined ? res.TotalSizeBytes : orphanItems.reduce((acc, i) => acc + (i.SizeBytes || 0), 0);
+    const safeCount = res.SafeCount !== undefined ? res.SafeCount : orphanItems.filter(i => i.Risk === 'Safe').length;
+    const reviewCount = res.ReviewCount !== undefined ? res.ReviewCount : orphanItems.filter(i => i.Risk === 'Review').length;
+
+    document.getElementById('orphanFoundCount').textContent = totalCount;
+    document.getElementById('orphanFoundSize').textContent = formatSize(totalBytes);
+    document.getElementById('orphanSafeCount').textContent = safeCount;
+    document.getElementById('orphanReviewCount').textContent = reviewCount;
+}
+
+function renderOrphanItems() {
+    const listContainer = document.getElementById('orphanListContainer');
+    listContainer.innerHTML = '';
+
+    const filtered = orphanItems.filter(item => {
+        if (currentOrphanFilter === 'safe') return item.Risk === 'Safe';
+        if (currentOrphanFilter === 'review') return item.Risk === 'Review';
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        listContainer.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+                ${orphanItems.length === 0 ? 'Nenhum resíduo órfão encontrado no sistema. O computador está limpo!' : 'Nenhum item encontrado nesta categoria.'}
+            </div>
+        `;
+        updateCleanButtonState();
+        return;
+    }
+
+    filtered.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'orphan-item-card';
+
+        const isSafe = item.Risk === 'Safe';
+        const badgeClass = isSafe ? 'safe' : 'review';
+        const badgeLabel = isSafe ? '🟢 Seguro' : '🟡 Requer Revisão';
+        const sizeStr = item.SizeBytes > 0 ? formatSize(item.SizeBytes) : '--';
+
+        card.innerHTML = `
+            <input type="checkbox" data-id="${item.Id}" ${item.Selected ? 'checked' : ''}>
+            <div class="orphan-item-info">
+                <div class="orphan-item-header">
+                    <span class="orphan-item-title">${escapeHtml(item.Name)}</span>
+                    <span class="orphan-risk-badge ${badgeClass}">${badgeLabel}</span>
+                </div>
+                <div class="orphan-item-reason">${escapeHtml(item.Reason)}</div>
+                <div class="orphan-item-path" title="${escapeHtml(item.Path)}">${escapeHtml(item.Path)}</div>
+            </div>
+            <div class="orphan-item-size">${sizeStr}</div>
+        `;
+
+        const chk = card.querySelector('input[type="checkbox"]');
+        chk.addEventListener('change', (e) => {
+            item.Selected = e.target.checked;
+            updateCleanButtonState();
+        });
+
+        listContainer.appendChild(card);
+    });
+
+    updateCleanButtonState();
+}
+
+function updateCleanButtonState() {
+    const selectedCount = orphanItems.filter(i => i.Selected).length;
+    const btnClean = document.getElementById('btnCleanSelectedOrphans');
+    btnClean.disabled = selectedCount === 0;
+    btnClean.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+        Excluir Resíduos Selecionados (${selectedCount})
+    `;
+}
+
+function setOrphanSelection(mode) {
+    orphanItems.forEach(item => {
+        if (mode === 'all') item.Selected = true;
+        else if (mode === 'none') item.Selected = false;
+        else if (mode === 'safe') item.Selected = (item.Risk === 'Safe');
+    });
+    renderOrphanItems();
+}
+
+async function cleanSelectedOrphans() {
+    const selected = orphanItems.filter(i => i.Selected);
+    if (selected.length === 0) return;
+
+    const confirm = window.confirm(
+        `Deseja realmente excluir ${selected.length} resíduos órfãos selecionados?\n\n` +
+        `• Um Ponto de Restauração será criado preventivamente no Windows.\n` +
+        `• Arquivos e pastas serão enviados para a Lixeira do Windows.`
+    );
+    if (!confirm) return;
+
+    const btnClean = document.getElementById('btnCleanSelectedOrphans');
+    btnClean.disabled = true;
+    btnClean.textContent = 'Limpando com segurança...';
+    showToast('Iniciando limpeza de resíduos órfãos...', 'info');
+
+    try {
+        const result = await window.api.cleanOrphans(selected);
+        if (result.Success) {
+            const freed = result.RemovedBytes > 0 ? ` (~${formatSize(result.RemovedBytes)} liberados)` : '';
+            showToast(`${result.RemovedCount} resíduos limpos com sucesso!${freed}`, 'success');
+
+            const removedPaths = new Set(selected.map(s => s.Path));
+            orphanItems = orphanItems.filter(item => !removedPaths.has(item.Path));
+            updateOrphanStats({
+                TotalCount: orphanItems.length,
+                TotalSizeBytes: orphanItems.reduce((acc, i) => acc + (i.SizeBytes || 0), 0),
+                SafeCount: orphanItems.filter(i => i.Risk === 'Safe').length,
+                ReviewCount: orphanItems.filter(i => i.Risk === 'Review').length
+            });
+            renderOrphanItems();
+            document.getElementById('orphanStatusText').textContent = 'Limpeza concluída com sucesso!';
+        } else {
+            showToast('Alguns itens não puderam ser removidos.', 'error');
+        }
+    } catch (e) {
+        showToast(`Erro na limpeza: ${e.message}`, 'error');
+    } finally {
+        updateCleanButtonState();
+    }
 }

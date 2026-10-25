@@ -300,6 +300,7 @@ foreach ($hive in $regHives) {
                             Hive = $hive
                             KeyPath = $ck.Name
                             PSPath = $ck.PSPath
+                            ParentKey = $pubKey
                             ValueName = ""
                             SubKeyCount = $ck.SubKeyCount
                             ValueCount = $ck.ValueCount
@@ -377,10 +378,28 @@ $appPathsHives = @(
     "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\App Paths"
 )
 
+$extraExeCands = [System.Collections.Generic.List[string]]::new()
+if ($cleanName -like "*defrag*") {
+    $extraExeCands.AddRange(@("df.exe", "df64.exe", "defraggler.exe", "defraggler64.exe"))
+}
+if ($InstallLocation -and (Test-Path $InstallLocation)) {
+    $foundExes = Get-ChildItem -Path $InstallLocation -Filter "*.exe" -File -ErrorAction SilentlyContinue
+    foreach ($fe in $foundExes) {
+        if (-not $extraExeCands.Contains($fe.Name)) {
+            $extraExeCands.Add($fe.Name)
+        }
+    }
+}
+
 foreach ($apHive in $appPathsHives) {
     if (-not (Test-Path $apHive)) { continue }
     foreach ($term in $searchTerms) {
-        $cands = @("$term.exe", "$term")
+        $cands = [System.Collections.Generic.List[string]]::new()
+        $cands.Add("$term.exe")
+        $cands.Add("$term")
+        foreach ($extra in $extraExeCands) {
+            if (-not $cands.Contains($extra)) { $cands.Add($extra) }
+        }
         foreach ($c in $cands) {
             $targetAp = Join-Path $apHive $c
             if (Test-Path $targetAp) {
@@ -393,11 +412,34 @@ foreach ($apHive in $appPathsHives) {
                         ValueName = ""
                         SubKeyCount = $apObj.SubKeyCount
                         ValueCount = $apObj.ValueCount
-                        Description = "Registro de Execução Rápida do Windows (App Paths)"
+                        Description = "Registro de Execução Rápida do Windows (App Paths - $c)"
                         Selected = $true
                     })
                 }
             }
+        }
+    }
+}
+
+# 8.1 Checar substituição de utilitários do sistema (ex: ReplaceWindowsDefrag do Defraggler)
+$specialSystemOverrides = @(
+    @{ Path = "HKLM:\SOFTWARE\Microsoft\Dfrg"; Value = "ReplaceWindowsDefrag"; Desc = "Configuração de substituição do desfragmentador do Windows" },
+    @{ Path = "HKCU:\Software\Microsoft\Dfrg"; Value = "ReplaceWindowsDefrag"; Desc = "Configuração de substituição do desfragmentador do Windows" }
+)
+foreach ($sso in $specialSystemOverrides) {
+    if (Test-Path $sso.Path) {
+        $prop = (Get-ItemProperty -Path $sso.Path -ErrorAction SilentlyContinue).($sso.Value)
+        if ($prop -ne $null) {
+            $foundRegistry.Add([PSCustomObject]@{
+                Hive = "HKLM"
+                KeyPath = "$($sso.Path) -> $($sso.Value)"
+                PSPath = $sso.Path
+                ValueName = $sso.Value
+                SubKeyCount = 0
+                ValueCount = 1
+                Description = $sso.Desc
+                Selected = $true
+            })
         }
     }
 }
