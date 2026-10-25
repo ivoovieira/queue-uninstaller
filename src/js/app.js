@@ -284,6 +284,20 @@ function setupEventListeners() {
     document.getElementById('btnOrphanSelectSafe').addEventListener('click', () => setOrphanSelection('safe'));
     document.getElementById('btnOrphanDeselectAll').addEventListener('click', () => setOrphanSelection('none'));
 
+    const checkOrphanHeaderAll = document.getElementById('checkOrphanHeaderAll');
+    if (checkOrphanHeaderAll) {
+        checkOrphanHeaderAll.addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            const filtered = orphanItems.filter(item => {
+                if (currentOrphanFilter === 'safe') return item.Risk === 'Safe';
+                if (currentOrphanFilter === 'review') return item.Risk === 'Review';
+                return true;
+            });
+            filtered.forEach(item => { item.Selected = checked; });
+            renderOrphanItems();
+        });
+    }
+
     document.querySelectorAll('.orphan-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.orphan-filter-btn').forEach(b => b.classList.remove('active'));
@@ -1302,6 +1316,26 @@ function updateOrphanStats(res) {
     document.getElementById('orphanReviewCount').textContent = reviewCount;
 }
 
+function formatCleanOrphanPath(rawPath) {
+    if (!rawPath) return '';
+    return rawPath
+        .replace(/Microsoft\.PowerShell\.Core\\Registry::/gi, '')
+        .replace(/^HKEY_CURRENT_USER\\?/i, 'HKCU\\')
+        .replace(/^HKEY_LOCAL_MACHINE\\?/i, 'HKLM\\');
+}
+
+function getOrphanTypeIcon(item) {
+    const p = (item.Path || '').toLowerCase();
+    const t = (item.Type || '').toLowerCase();
+    if (t === 'apppath' || p.includes('app paths') || p.endsWith('.exe')) {
+        return { icon: '⚡', title: 'Caminho de Executável (App Paths)' };
+    }
+    if (t === 'residualfolder' || p.startsWith('c:\\') || p.startsWith('\\\\')) {
+        return { icon: '📁', title: 'Pasta Residual no Disco' };
+    }
+    return { icon: '🗝️', title: 'Chave Residual do Registro' };
+}
+
 function renderOrphanItems() {
     const listContainer = document.getElementById('orphanListContainer');
     listContainer.innerHTML = '';
@@ -1311,6 +1345,11 @@ function renderOrphanItems() {
         if (currentOrphanFilter === 'review') return item.Risk === 'Review';
         return true;
     });
+
+    const headerCheck = document.getElementById('checkOrphanHeaderAll');
+    if (headerCheck) {
+        headerCheck.checked = filtered.length > 0 && filtered.every(i => i.Selected);
+    }
 
     if (filtered.length === 0) {
         listContainer.innerHTML = `
@@ -1322,37 +1361,57 @@ function renderOrphanItems() {
         return;
     }
 
+    const fragment = document.createDocumentFragment();
+
     filtered.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'orphan-item-card';
+        const row = document.createElement('div');
+        row.className = `orphan-compact-row ${item.Selected ? 'selected' : ''}`;
 
         const isSafe = item.Risk === 'Safe';
-        const badgeClass = isSafe ? 'safe' : 'review';
-        const badgeLabel = isSafe ? '🟢 Seguro' : '🟡 Requer Revisão';
+        const badgeHtml = isSafe 
+            ? `<span class="orphan-badge-safe">🟢 Seguro</span>`
+            : `<span class="orphan-badge-review">🟡 Revisar</span>`;
         const sizeStr = item.SizeBytes > 0 ? formatSize(item.SizeBytes) : '--';
+        const cleanPath = formatCleanOrphanPath(item.Path);
+        const typeInfo = getOrphanTypeIcon(item);
 
-        card.innerHTML = `
-            <input type="checkbox" data-id="${item.Id}" ${item.Selected ? 'checked' : ''}>
-            <div class="orphan-item-info">
-                <div class="orphan-item-header">
-                    <span class="orphan-item-title">${escapeHtml(item.Name)}</span>
-                    <span class="orphan-risk-badge ${badgeClass}">${badgeLabel}</span>
-                </div>
-                <div class="orphan-item-reason">${escapeHtml(item.Reason)}</div>
-                <div class="orphan-item-path" title="${escapeHtml(item.Path)}">${escapeHtml(item.Path)}</div>
+        row.innerHTML = `
+            <div class="orphan-col-check">
+                <input type="checkbox" data-id="${item.Id}" ${item.Selected ? 'checked' : ''}>
             </div>
-            <div class="orphan-item-size">${sizeStr}</div>
+            <div class="orphan-col-icon" title="${typeInfo.title}">${typeInfo.icon}</div>
+            <div class="orphan-col-name" title="${escapeHtml(item.Name)} (${escapeHtml(item.Reason || '')})">${escapeHtml(item.Name)}</div>
+            <div class="orphan-col-status">${badgeHtml}</div>
+            <div class="orphan-col-path" title="${escapeHtml(cleanPath)}">${escapeHtml(cleanPath)}</div>
+            <div class="orphan-col-size">${sizeStr}</div>
         `;
 
-        const chk = card.querySelector('input[type="checkbox"]');
+        const chk = row.querySelector('input[type="checkbox"]');
         chk.addEventListener('change', (e) => {
             item.Selected = e.target.checked;
+            row.classList.toggle('selected', item.Selected);
             updateCleanButtonState();
+            if (headerCheck) {
+                headerCheck.checked = filtered.every(i => i.Selected);
+            }
         });
 
-        listContainer.appendChild(card);
+        row.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT') {
+                chk.checked = !chk.checked;
+                item.Selected = chk.checked;
+                row.classList.toggle('selected', item.Selected);
+                updateCleanButtonState();
+                if (headerCheck) {
+                    headerCheck.checked = filtered.every(i => i.Selected);
+                }
+            }
+        });
+
+        fragment.appendChild(row);
     });
 
+    listContainer.appendChild(fragment);
     updateCleanButtonState();
 }
 
