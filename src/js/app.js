@@ -937,7 +937,7 @@ async function checkAppUpdates(isManual = false) {
 
     try {
         const res = await window.api.checkForUpdates();
-        updateBtnText.textContent = 'Atualizações';
+        updateBtnText.textContent = 'Versão do App';
 
         if (res.hasUpdate) {
             badgeUpdate.classList.remove('hidden');
@@ -950,7 +950,7 @@ async function checkAppUpdates(isManual = false) {
                     applyAppUpdate();
                 }
             } else {
-                showToast(`Nova versão disponível (${vText})! Clique em "Atualizações" no topo para aplicar.`, 'info');
+                showToast(`Nova versão disponível (${vText})! Clique em "Versão do App" no topo para aplicar.`, 'info');
             }
         } else {
             badgeUpdate.classList.add('hidden');
@@ -959,7 +959,7 @@ async function checkAppUpdates(isManual = false) {
             }
         }
     } catch (e) {
-        updateBtnText.textContent = 'Atualizações';
+        updateBtnText.textContent = 'Versão do App';
         if (isManual) showToast(`Erro ao checar atualizações: ${e.message}`, 'error');
     }
 }
@@ -971,14 +971,14 @@ async function applyAppUpdate() {
         const res = await window.api.applyUpdate();
         if (res.success) {
             showToast(res.message || 'Instalador iniciado! Conclua o assistente para atualizar.', 'success');
-            updateBtnText.textContent = 'Atualizações';
+            updateBtnText.textContent = 'Versão do App';
         } else {
             showToast(`Falha ao atualizar: ${res.message}`, 'error');
-            updateBtnText.textContent = 'Atualizações';
+            updateBtnText.textContent = 'Versão do App';
         }
     } catch (e) {
         showToast(`Erro na atualização: ${e.message}`, 'error');
-        updateBtnText.textContent = 'Atualizações';
+        updateBtnText.textContent = 'Versão do App';
     }
 }
 function formatSize(bytes) {
