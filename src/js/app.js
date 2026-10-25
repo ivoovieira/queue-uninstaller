@@ -99,8 +99,10 @@ const statTotalApps = document.getElementById('statTotalApps');
 const statTotalSize = document.getElementById('statTotalSize');
 const statSelectedCount = document.getElementById('statSelectedCount');
 
-// Barra Flutuante de Fila
+// Barra Slim de Fila
 const batchBar = document.getElementById('batchBar');
+const batchCountStrong = document.getElementById('batchCountStrong');
+const batchSizeSpan = document.getElementById('batchSizeSpan');
 const batchBadgeCount = document.getElementById('batchBadgeCount');
 const batchBarTitle = document.getElementById('batchBarTitle');
 const batchBarSubtitle = document.getElementById('batchBarSubtitle');
@@ -745,20 +747,31 @@ function updateBatchBar() {
 
     statSelectedCount.textContent = `${count} selecionado${count !== 1 ? 's' : ''} (~${sizeStr})`;
 
+    const tableContainer = document.querySelector('.table-container');
+
     if (count === 0) {
         batchBar.classList.add('hidden');
+        if (tableContainer) tableContainer.classList.remove('has-batch-bar');
         return;
     }
 
     batchBar.classList.remove('hidden');
-    batchBadgeCount.textContent = count;
-    batchBarTitle.textContent = `${count} programa${count > 1 ? 's' : ''} na fila de remoção`;
-    batchBarSubtitle.textContent = `Espaço total estimado a liberar: ~${sizeStr}`;
+    if (tableContainer) tableContainer.classList.add('has-batch-bar');
+
+    const countStrong = document.getElementById('batchCountStrong');
+    const sizeSpan = document.getElementById('batchSizeSpan');
+    if (countStrong) countStrong.textContent = count;
+    if (sizeSpan) sizeSpan.textContent = `(~${sizeStr})`;
+
+    if (batchBadgeCount) batchBadgeCount.textContent = count;
+    if (batchBarTitle) batchBarTitle.textContent = `${count} programa${count > 1 ? 's' : ''} na fila de remoção`;
+    if (batchBarSubtitle) batchBarSubtitle.textContent = `Espaço total estimado a liberar: ~${sizeStr}`;
+
     btnStartBatch.innerHTML = `
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        Desinstalar Fila (${count})
+        <span>Desinstalar Fila (${count})</span>
     `;
 }
 

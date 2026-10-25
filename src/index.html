@@ -173,14 +173,10 @@
             </div>
         </main>
 
-        <!-- Floating Batch Action Bar -->
+        <!-- Slim Batch Action Bar (Linha Fina e Compacta) -->
         <div id="batchBar" class="batch-bar hidden">
-            <div class="batch-info">
-                <div class="batch-badge" id="batchBadgeCount">0</div>
-                <div>
-                    <h3 id="batchBarTitle">0 programas selecionados para remoção</h3>
-                    <p id="batchBarSubtitle">Tamanho total estimado a liberar: 0 MB</p>
-                </div>
+            <div class="batch-summary">
+                <span id="batchSummaryText"><strong id="batchCountStrong">0</strong> selecionados <span id="batchSizeSpan" class="text-muted">(~0 MB)</span></span>
             </div>
 
             <div class="batch-options">
@@ -207,12 +203,12 @@
             </div>
 
             <div class="batch-buttons">
-                <button id="btnCancelSelection" class="btn btn-secondary">Cancelar</button>
-                <button id="btnStartBatch" class="btn btn-danger">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="btnCancelSelection" class="btn-batch-cancel" title="Desmarcar todos">Cancelar</button>
+                <button id="btnStartBatch" class="btn btn-danger btn-batch-start">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"/>
                     </svg>
-                    Desinstalar Fila Agora
+                    <span>Desinstalar Fila</span>
                 </button>
             </div>
         </div>

@@ -306,6 +306,11 @@ body {
     overflow-y: auto;
     position: relative;
     background-color: var(--bg-dark);
+    transition: padding-bottom 0.15s ease;
+}
+
+.table-container.has-batch-bar {
+    padding-bottom: 50px;
 }
 
 .apps-table {
@@ -507,79 +512,144 @@ body {
     border-color: var(--accent-red);
 }
 
-/* Floating Batch Bar */
+/* Slim Batch Action Bar (Linha Fina, Elegante e Não Invasiva) */
 .batch-bar {
     position: fixed;
-    bottom: 34px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(100% - 36px);
-    max-width: 1100px;
-    background: linear-gradient(135deg, #172138 0%, #111a2c 100%);
-    border: 1px solid #3b82f6;
-    border-radius: var(--radius-lg);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 20px rgba(59, 130, 246, 0.25);
-    padding: 12px 18px;
+    bottom: 26px; /* Ajustado milimetricamente no topo da statusbar inferior */
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-height: 38px;
+    height: 40px;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid #1e293b;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.45);
+    padding: 4px 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
     z-index: 50;
-    animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slideUpSlim 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
 }
 
-@keyframes slideUp {
-    from { transform: translate(-50%, 60px); opacity: 0; }
-    to { transform: translate(-50%, 0); opacity: 1; }
+@keyframes slideUpSlim {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
-.batch-info {
+.batch-summary {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 5px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
-.batch-badge {
-    width: 34px;
-    height: 34px;
-    background-color: #2563eb;
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.batch-summary strong {
+    color: #38bdf8;
+    font-size: 0.92rem;
     font-weight: 700;
-    font-size: 1.05rem;
 }
 
-.batch-info h3 { font-size: 0.92rem; font-weight: 600; }
-.batch-info p { font-size: 0.78rem; color: var(--text-secondary); }
+.batch-summary .text-muted {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-left: 2px;
+}
 
 .batch-options {
     display: flex;
     align-items: center;
-    gap: 14px;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
 }
 
 .option-check {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.8rem;
+    gap: 5px;
+    font-size: 0.78rem;
     color: var(--text-secondary);
     cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    transition: color 0.15s ease;
 }
-.option-check input { cursor: pointer; accent-color: #3b82f6; }
-.option-check:hover { color: var(--text-primary); }
 
-.batch-buttons { display: flex; gap: 8px; }
+.option-check input {
+    cursor: pointer;
+    accent-color: #3b82f6;
+    margin: 0;
+    width: 13px;
+    height: 13px;
+}
+
+.option-check:hover {
+    color: var(--text-primary);
+}
+
+.batch-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.btn-batch-cancel {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: var(--text-secondary);
+    padding: 3px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-batch-cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+.btn-batch-start {
+    height: 28px;
+    padding: 3px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+}
 
 /* Status Bar Inferior Clássico */
 .app-statusbar {
     display: flex;
     align-items: center;
     gap: 20px;
-    padding: 6px 16px;
+    padding: 4px 16px;
+    height: 26px;
+    min-height: 26px;
+    box-sizing: border-box;
     background-color: #080d19;
     border-top: 1px solid var(--border-color);
     font-size: 0.78rem;
