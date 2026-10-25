@@ -404,12 +404,57 @@ function refreshCurrentInventory(force = true) {
     }
 }
 
+function runProgressAnimation({ barElem, percentElem, labelElem, steps, duration = 2000 }) {
+    let currentPct = 10;
+    let stepIndex = 0;
+    if (barElem) barElem.style.width = '10%';
+    if (percentElem) percentElem.textContent = '10%';
+    if (labelElem && steps && steps.length > 0) labelElem.textContent = steps[0];
+
+    const stepInterval = setInterval(() => {
+        if (currentPct < 90) {
+            currentPct += Math.floor(Math.random() * 8) + 4;
+            if (currentPct > 90) currentPct = 90;
+            if (barElem) barElem.style.width = `${currentPct}%`;
+            if (percentElem) percentElem.textContent = `${currentPct}%`;
+        }
+        if (steps && steps.length > 0) {
+            stepIndex = (stepIndex + 1) % steps.length;
+            if (labelElem) labelElem.textContent = steps[stepIndex];
+        }
+    }, Math.max(300, Math.floor(duration / (steps ? steps.length : 5))));
+
+    return {
+        finish: () => new Promise(resolve => {
+            clearInterval(stepInterval);
+            if (barElem) barElem.style.width = '100%';
+            if (percentElem) percentElem.textContent = '100%';
+            if (labelElem) labelElem.textContent = 'Concluído!';
+            setTimeout(resolve, 100);
+        }),
+        stop: () => {
+            clearInterval(stepInterval);
+        }
+    };
+}
+const runIndeterminateLoading = runProgressAnimation;
+
 function setupScanProgressListener() {
     if (window.api && typeof window.api.onScanProgress === 'function') {
         window.api.onScanProgress(({ pct, step }) => {
             if (loadingProgressBar) loadingProgressBar.style.width = `${pct}%`;
             if (loadingPercentLabel) loadingPercentLabel.textContent = `${pct}%`;
             if (loadingStepLabel && step) loadingStepLabel.textContent = step;
+        });
+    }
+    if (window.api && typeof window.api.onOrphanScanProgress === 'function') {
+        window.api.onOrphanScanProgress(({ pct, step }) => {
+            const bar = document.getElementById('orphanProgressBar');
+            const pctLbl = document.getElementById('orphanPercentLabel');
+            const stepLbl = document.getElementById('orphanStepLabel');
+            if (bar) bar.style.width = `${pct}%`;
+            if (pctLbl) pctLbl.textContent = `${pct}%`;
+            if (stepLbl && step) stepLbl.textContent = step;
         });
     }
 }

@@ -440,7 +440,12 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 ipcMain.handle('scan-orphans', async () => {
-    return await scanOrphans();
+    return await scanOrphans((pData) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('orphan-scan-progress', pData);
+        }
+        sendSSE({ type: 'orphan-scan-progress', ...pData });
+    });
 });
 
 ipcMain.handle('clean-orphans', async (event, items) => {

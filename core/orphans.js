@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-function scanOrphans() {
+function scanOrphans(onProgress) {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'scan_orphaned_residuals.ps1');
 
@@ -13,9 +13,28 @@ function scanOrphans() {
 
         let stdout = '';
         let stderr = '';
+        let stderrBuffer = '';
 
         child.stdout.on('data', (d) => { stdout += d.toString('utf8'); });
-        child.stderr.on('data', (d) => { stderr += d.toString('utf8'); });
+        child.stderr.on('data', (d) => {
+            const chunk = d.toString('utf8');
+            stderr += chunk;
+            stderrBuffer += chunk;
+            const lines = stderrBuffer.split(/\r?\n/);
+            stderrBuffer = lines.pop();
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('[PROGRESS]')) {
+                    try {
+                        const jsonStr = trimmed.substring(10).trim();
+                        const pData = JSON.parse(jsonStr);
+                        if (typeof onProgress === 'function') {
+                            onProgress(pData);
+                        }
+                    } catch (e) {}
+                }
+            }
+        });
 
         child.on('close', (code) => {
             try {

@@ -24,6 +24,11 @@ const api = {
         const sub = (event, data) => callback(data);
         ipcRenderer.on('scan-progress', sub);
         return () => ipcRenderer.removeListener('scan-progress', sub);
+    },
+    onOrphanScanProgress: (callback) => {
+        const sub = (event, data) => callback(data);
+        ipcRenderer.on('orphan-scan-progress', sub);
+        return () => ipcRenderer.removeListener('orphan-scan-progress', sub);
     }
 };
 
