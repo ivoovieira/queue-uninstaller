@@ -298,13 +298,17 @@ async function runBatchQueue(apps, options = {}) {
 }
 
 function createWindow() {
+    const appIcon = fs.existsSync(path.join(__dirname, 'icon.ico'))
+        ? path.join(__dirname, 'icon.ico')
+        : path.join(__dirname, 'icon.png');
+
     mainWindow = new BrowserWindow({
         width: 1260,
         height: 840,
         minWidth: 1000,
         minHeight: 650,
         backgroundColor: '#0f172a',
-        icon: path.join(__dirname, 'icon.ico'),
+        icon: appIcon,
         titleBarStyle: 'hidden',
         titleBarOverlay: {
             color: '#1e293b',
