@@ -1,5 +1,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 2; step = "Iniciando varredura do sistema..." } | ConvertTo-Json -Compress))
+
 Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
 
 # Inicialização de COM Object para atalhos (.lnk)
@@ -43,9 +45,12 @@ $keys = @(
     'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
 )
 
-$rawApps = Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { 
+$rawApps = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { 
     $_.DisplayName -and ($_.DisplayName.Trim() -ne '') -and ($_.SystemComponent -ne 1) -and (-not $_.ParentKeyName)
-}
+})
+
+$totalApps = $rawApps.Count
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 10; step = "Lendo Registro: $totalApps programas encontrados..." } | ConvertTo-Json -Compress))
 
 function Detect-InstallerType($uninstallStr, $quietStr) {
     $str = "$uninstallStr $quietStr"
@@ -329,7 +334,13 @@ function Get-IconBase64($iconPath, $installLoc, $uninstallStr, $displayName, $ap
     return ''
 }
 
+$current = 0
 $appList = foreach ($app in $rawApps) {
+    $current++
+    $pct = [math]::Round(10 + (($current / [math]::Max($totalApps, 1)) * 80))
+    $appName = if ($app.DisplayName) { $app.DisplayName.Trim() } else { "Aplicativo" }
+    [Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = $pct; step = "Examinando $appName ($current de $totalApps)..." } | ConvertTo-Json -Compress))
+
     $installerType = Detect-InstallerType -uninstallStr $app.UninstallString -quietStr $app.QuietUninstallString
     $bestQuiet = Get-OptimizedQuietString -uninstallStr $app.UninstallString -quietStr $app.QuietUninstallString -installerType $installerType
 
@@ -454,6 +465,8 @@ $appList = foreach ($app in $rawApps) {
 }
 
 # Deduplica por DisplayName normalizado
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 95; step = "Finalizando compilação da lista..." } | ConvertTo-Json -Compress))
 $uniqueApps = $appList | Group-Object { $_.DisplayName.ToLower() } | ForEach-Object { $_.Group[0] } | Sort-Object DisplayName
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 100; step = "Concluído!" } | ConvertTo-Json -Compress))
 
 $uniqueApps | ConvertTo-Json -Depth 4 -Compress

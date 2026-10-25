@@ -1,12 +1,20 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$rawApps = try {
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 5; step = "Consultando catálogo Appx/MSIX no Windows..." } | ConvertTo-Json -Compress))
+
+$rawApps = @(try {
     Get-AppxPackage -AllUsers -ErrorAction Stop | Where-Object { (-not $_.IsFramework) -and (-not $_.NonRemovable) }
 } catch {
     Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { (-not $_.IsFramework) -and (-not $_.NonRemovable) }
-}
+})
 
+$totalApps = $rawApps.Count
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 15; step = "Lendo pacotes AppX: $totalApps encontrados..." } | ConvertTo-Json -Compress))
+
+$current = 0
 $appList = foreach ($a in $rawApps) {
+    $current++
+    $pct = [math]::Round(15 + (($current / [math]::Max($totalApps, 1)) * 75))
     if (-not $a.Name -or ($a.Name -match '^Microsoft\.VCLibs') -or ($a.Name -match '^Microsoft\.UI\.Xaml') -or ($a.Name -match '^Microsoft\.NET')) {
         continue
     }
@@ -23,6 +31,8 @@ $appList = foreach ($a in $rawApps) {
     if (-not $friendlyName -or $friendlyName -match '^\d+$') {
         $friendlyName = ($rawName -replace '(?:\.\d+)+$', '')
     }
+
+    [Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = $pct; step = "Examinando $friendlyName ($current de $totalApps)..." } | ConvertTo-Json -Compress))
 
     # Tamanho da pasta
     $sizeKb = 0
@@ -55,5 +65,7 @@ $appList = foreach ($a in $rawApps) {
     }
 }
 
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 95; step = "Finalizando lista de apps..." } | ConvertTo-Json -Compress))
 $unique = $appList | Group-Object DisplayName | ForEach-Object { $_.Group[0] } | Sort-Object DisplayName
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 100; step = "Concluído!" } | ConvertTo-Json -Compress))
 $unique | ConvertTo-Json -Depth 3 -Compress

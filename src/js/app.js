@@ -3,12 +3,17 @@ const API_BASE = window.location.protocol.startsWith('http') ? '' : 'http://loca
 
 if (!window.api || !window.api.getInstalledApps) {
     let batchListeners = [];
+    let scanProgressListeners = [];
     try {
         const evtSource = new EventSource(`${API_BASE}/api/events`);
         evtSource.onmessage = (e) => {
             try {
                 const data = JSON.parse(e.data);
-                batchListeners.forEach(cb => cb(data));
+                if (data.type === 'scan-progress') {
+                    scanProgressListeners.forEach(cb => cb(data));
+                } else {
+                    batchListeners.forEach(cb => cb(data));
+                }
             } catch (err) {}
         };
     } catch (e) {}
@@ -57,6 +62,10 @@ if (!window.api || !window.api.getInstalledApps) {
         onBatchStatus: (cb) => {
             batchListeners.push(cb);
             return () => { batchListeners = batchListeners.filter(l => l !== cb); };
+        },
+        onScanProgress: (cb) => {
+            scanProgressListeners.push(cb);
+            return () => { scanProgressListeners = scanProgressListeners.filter(l => l !== cb); };
         }
     };
 }
@@ -77,6 +86,9 @@ let cachedWindowsApps = null;
 const appsTable = document.getElementById('appsTable');
 const appsTableBody = document.getElementById('appsTableBody');
 const loadingState = document.getElementById('loadingState');
+const loadingProgressBar = document.getElementById('loadingProgressBar');
+const loadingPercentLabel = document.getElementById('loadingPercentLabel');
+const loadingStepLabel = document.getElementById('loadingStepLabel');
 const emptyState = document.getElementById('emptyState');
 const searchInput = document.getElementById('searchInput');
 const btnClearSearch = document.getElementById('btnClearSearch');
@@ -129,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.api) {
         console.log('>>> Métodos disponíveis em window.api:', Object.keys(window.api));
     }
+    setupScanProgressListener();
     loadApps();
     setupEventListeners();
     setupBatchListener();
@@ -375,45 +388,14 @@ function refreshCurrentInventory(force = true) {
     }
 }
 
-function runIndeterminateLoading({ containerElem, barElem, percentElem, labelElem, steps, defaultText }) {
-    if (containerElem) containerElem.classList.add('indeterminate');
-    if (percentElem) {
-        percentElem.className = 'loading-active-pill';
-        percentElem.textContent = 'Carregando...';
+function setupScanProgressListener() {
+    if (window.api && typeof window.api.onScanProgress === 'function') {
+        window.api.onScanProgress(({ pct, step }) => {
+            if (loadingProgressBar) loadingProgressBar.style.width = `${pct}%`;
+            if (loadingPercentLabel) loadingPercentLabel.textContent = `${pct}%`;
+            if (loadingStepLabel && step) loadingStepLabel.textContent = step;
+        });
     }
-    
-    let stepIndex = 0;
-    if (labelElem && steps && steps.length > 0) {
-        labelElem.textContent = steps[0];
-    } else if (labelElem && defaultText) {
-        labelElem.textContent = defaultText;
-    }
-
-    let interval = null;
-    if (steps && steps.length > 1 && labelElem) {
-        interval = setInterval(() => {
-            stepIndex = (stepIndex + 1) % steps.length;
-            labelElem.textContent = steps[stepIndex];
-        }, 1500);
-    }
-
-    return {
-        stop: () => {
-            if (interval) clearInterval(interval);
-            if (containerElem) containerElem.classList.remove('indeterminate');
-        },
-        finish: () => new Promise(resolve => {
-            if (interval) clearInterval(interval);
-            if (containerElem) containerElem.classList.remove('indeterminate');
-            if (barElem) barElem.style.width = '100%';
-            if (percentElem) {
-                percentElem.className = '';
-                percentElem.textContent = '100%';
-            }
-            if (labelElem) labelElem.textContent = 'Concluído!';
-            setTimeout(resolve, 80);
-        })
-    };
 }
 
 function updateFooterStats() {
@@ -459,28 +441,21 @@ async function loadWindowsApps(force = false) {
     if (titleElem) titleElem.textContent = 'Buscando Aplicativos da Microsoft Store...';
     if (subElem) subElem.textContent = 'Consultando pacotes Appx/MSIX instalados e metadados';
 
-    const anim = runIndeterminateLoading({
-        containerElem: document.querySelector('#loadingState .progress-bar-container'),
-        barElem: document.getElementById('loadingProgressBar'),
-        percentElem: document.getElementById('loadingPercentLabel'),
-        labelElem: document.getElementById('loadingStepLabel'),
-        steps: [
-            'Consultando catálogo Appx/MSIX no Windows...',
-            'Filtrando componentes nativos de sistema...',
-            'Extraindo logotipos e nomes amigáveis...',
-            'Organizando aplicativos de usuário...'
-        ]
-    });
+    if (loadingProgressBar) loadingProgressBar.style.width = '0%';
+    if (loadingPercentLabel) loadingPercentLabel.textContent = '0%';
+    if (loadingStepLabel) loadingStepLabel.textContent = 'Consultando catálogo Appx/MSIX no Windows...';
 
     try {
         allApps = await window.api.getWindowsApps();
         cachedWindowsApps = allApps;
-        await anim.finish();
+        if (loadingProgressBar) loadingProgressBar.style.width = '100%';
+        if (loadingPercentLabel) loadingPercentLabel.textContent = '100%';
+        if (loadingStepLabel) loadingStepLabel.textContent = 'Concluído!';
+        await new Promise(r => setTimeout(r, 120));
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
         applyFiltersAndRender();
     } catch (err) {
-        anim.stop();
         showToast(`Erro ao listar Windows Apps: ${err.message}`, 'error');
         loadingState.classList.add('hidden');
         emptyState.classList.remove('hidden');
@@ -509,29 +484,21 @@ async function loadApps(retryCount = 0, force = false) {
     if (titleElem) titleElem.textContent = 'Examinando Registro e Sistema do Windows...';
     if (subElem) subElem.textContent = 'Detectando aplicativos instalados, ícones nativos e estimativa de tamanho';
 
-    const anim = runIndeterminateLoading({
-        containerElem: document.querySelector('#loadingState .progress-bar-container'),
-        barElem: document.getElementById('loadingProgressBar'),
-        percentElem: document.getElementById('loadingPercentLabel'),
-        labelElem: document.getElementById('loadingStepLabel'),
-        steps: [
-            'Lendo chaves do Registro e compilando inventário...',
-            'Examinando instalações de 64-bit e 32-bit (Wow6432Node)...',
-            'Extraindo ícones oficiais nativos e fabricantes...',
-            'Calculando tamanhos estimados e identificando entradas órfãs...',
-            'Estruturando inventário de programas...'
-        ]
-    });
+    if (loadingProgressBar) loadingProgressBar.style.width = '0%';
+    if (loadingPercentLabel) loadingPercentLabel.textContent = '0%';
+    if (loadingStepLabel) loadingStepLabel.textContent = 'Iniciando varredura do sistema...';
 
     try {
         allApps = await window.api.getInstalledApps();
         cachedPrograms = allApps;
-        await anim.finish();
+        if (loadingProgressBar) loadingProgressBar.style.width = '100%';
+        if (loadingPercentLabel) loadingPercentLabel.textContent = '100%';
+        if (loadingStepLabel) loadingStepLabel.textContent = 'Concluído!';
+        await new Promise(r => setTimeout(r, 120));
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
         applyFiltersAndRender();
     } catch (err) {
-        anim.stop();
         if (retryCount < 2) {
             console.log('Tentando reconectar em 1 segundo...');
             setTimeout(() => loadApps(retryCount + 1, force), 1000);

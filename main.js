@@ -86,7 +86,12 @@ function startInternalServer() {
 
         if (pathname === '/api/apps' && req.method === 'GET') {
             try {
-                const apps = await getInstalledApps();
+                const apps = await getInstalledApps((pData) => {
+                    sendSSE({ type: 'scan-progress', ...pData });
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('scan-progress', pData);
+                    }
+                });
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                 return res.end(JSON.stringify(apps));
             } catch (err) {
@@ -97,7 +102,12 @@ function startInternalServer() {
 
         if (pathname === '/api/windows-apps' && req.method === 'GET') {
             try {
-                const apps = await getWindowsApps();
+                const apps = await getWindowsApps((pData) => {
+                    sendSSE({ type: 'scan-progress', ...pData });
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('scan-progress', pData);
+                    }
+                });
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                 return res.end(JSON.stringify(apps));
             } catch (err) {
@@ -378,11 +388,21 @@ app.on('window-all-closed', () => {
 
 // IPC Handlers para quando rodar via Electron nativo
 ipcMain.handle('get-installed-apps', async () => {
-    return await getInstalledApps();
+    return await getInstalledApps((pData) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan-progress', pData);
+        }
+        sendSSE({ type: 'scan-progress', ...pData });
+    });
 });
 
 ipcMain.handle('get-windows-apps', async () => {
-    return await getWindowsApps();
+    return await getWindowsApps((pData) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan-progress', pData);
+        }
+        sendSSE({ type: 'scan-progress', ...pData });
+    });
 });
 
 ipcMain.handle('scan-leftovers', async (event, appItem, scanLevel) => {

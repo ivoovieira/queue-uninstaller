@@ -19,6 +19,11 @@ const api = {
         const sub = (event, data) => callback(data);
         ipcRenderer.on('batch-status', sub);
         return () => ipcRenderer.removeListener('batch-status', sub);
+    },
+    onScanProgress: (callback) => {
+        const sub = (event, data) => callback(data);
+        ipcRenderer.on('scan-progress', sub);
+        return () => ipcRenderer.removeListener('scan-progress', sub);
     }
 };
 

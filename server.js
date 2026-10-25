@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { getInstalledApps } = require('./core/inventory');
+const { getInstalledApps, getWindowsApps } = require('./core/inventory');
 const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
@@ -49,7 +49,22 @@ const server = http.createServer(async (req, res) => {
     // API Handlers
     if (pathname === '/api/apps' && req.method === 'GET') {
         try {
-            const apps = await getInstalledApps();
+            const apps = await getInstalledApps((pData) => {
+                sendSSE({ type: 'scan-progress', ...pData });
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify(apps));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    if (pathname === '/api/windows-apps' && req.method === 'GET') {
+        try {
+            const apps = await getWindowsApps((pData) => {
+                sendSSE({ type: 'scan-progress', ...pData });
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify(apps));
         } catch (err) {

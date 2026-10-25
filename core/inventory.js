@@ -1,7 +1,25 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-function getInstalledApps() {
+function parseStderrProgress(stderrChunk, state, onProgress) {
+    state.buffer += stderrChunk;
+    const lines = state.buffer.split(/\r?\n/);
+    state.buffer = lines.pop(); // Mantém o resto da linha incompleta
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('[PROGRESS]')) {
+            try {
+                const jsonStr = trimmed.substring(10).trim();
+                const pData = JSON.parse(jsonStr);
+                if (typeof onProgress === 'function') {
+                    onProgress(pData);
+                }
+            } catch (e) {}
+        }
+    }
+}
+
+function getInstalledApps(onProgress) {
     return new Promise((resolve, reject) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'get_installed_apps.ps1');
         
@@ -16,13 +34,16 @@ function getInstalledApps() {
 
         let stdout = '';
         let stderr = '';
+        const progressState = { buffer: '' };
 
         child.stdout.on('data', (data) => {
             stdout += data.toString('utf8');
         });
 
         child.stderr.on('data', (data) => {
-            stderr += data.toString('utf8');
+            const chunk = data.toString('utf8');
+            stderr += chunk;
+            parseStderrProgress(chunk, progressState, onProgress);
         });
 
         child.on('close', (code) => {
@@ -46,7 +67,7 @@ function getInstalledApps() {
     });
 }
 
-function getWindowsApps() {
+function getWindowsApps(onProgress) {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'get_windows_apps.ps1');
         const child = spawn('powershell.exe', [
@@ -56,7 +77,16 @@ function getWindowsApps() {
         ], { windowsHide: true });
 
         let stdout = '';
+        let stderr = '';
+        const progressState = { buffer: '' };
+
         child.stdout.on('data', d => stdout += d.toString('utf8'));
+        child.stderr.on('data', (data) => {
+            const chunk = data.toString('utf8');
+            stderr += chunk;
+            parseStderrProgress(chunk, progressState, onProgress);
+        });
+
         child.on('close', () => {
             try {
                 const jsonStart = stdout.indexOf('[');
