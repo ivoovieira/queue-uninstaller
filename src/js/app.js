@@ -100,7 +100,7 @@ const optAutoClean = document.getElementById('optAutoClean');
 const optRestorePoint = document.getElementById('optRestorePoint');
 const optRecycleBin = document.getElementById('optRecycleBin');
 const btnCheckUpdate = document.getElementById('btnCheckUpdate');
-const badgeUpdate = document.getElementById('badgeUpdate');
+const updateDot = document.getElementById('updateDot');
 const updateBtnText = document.getElementById('updateBtnText');
 
 // Modais
@@ -1141,8 +1141,9 @@ async function checkAppUpdates(isManual = false) {
         updateBtnText.textContent = 'Versão do App';
 
         if (res.hasUpdate) {
-            badgeUpdate.classList.remove('hidden');
+            if (updateDot) updateDot.classList.remove('hidden');
             const vText = res.remoteVersion || 'Nova versão';
+            btnCheckUpdate.title = `Nova versão ${vText} disponível no GitHub! Clique para atualizar.`;
             if (isManual) {
                 const confirmUpdate = window.confirm(
                     `🚀 Nova atualização disponível no GitHub!\n\nVersão mais recente: ${vText}\nSua versão atual: v${res.currentVersion}\n\nDeseja baixar e aplicar a atualização agora?`
@@ -1154,7 +1155,8 @@ async function checkAppUpdates(isManual = false) {
                 showToast(`Nova versão disponível (${vText})! Clique em "Versão do App" no topo para aplicar.`, 'info');
             }
         } else {
-            badgeUpdate.classList.add('hidden');
+            if (updateDot) updateDot.classList.add('hidden');
+            btnCheckUpdate.title = `Queu Uninstaller v${res.currentVersion} (Versão mais recente)`;
             if (isManual) {
                 showToast(`O Queu Uninstaller já está na versão mais recente (v${res.currentVersion})!`, 'success');
             }
