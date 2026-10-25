@@ -38,9 +38,9 @@ function Remove-ResidualFileSystemItem($targetPath) {
     if (-not (Test-Path $targetPath)) { return $null }
 
     # 1. Se contiver DLLs ou for uma DLL, desregistrar do Explorer via regsvr32
-    $isDir = (Get-Item $targetPath) -is [System.IO.DirectoryInfo]
+    $isDir = (Get-Item -LiteralPath $targetPath) -is [System.IO.DirectoryInfo]
     if ($isDir) {
-        $dlls = Get-ChildItem -Path $targetPath -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue
+        $dlls = Get-ChildItem -LiteralPath $targetPath -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue
         foreach ($dll in $dlls) {
             try {
                 Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$($dll.FullName)`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue

@@ -117,8 +117,25 @@ foreach ($item in $data) {
 
         if (Test-Path -LiteralPath $p) {
             $size = [int64]($item.SizeBytes)
+
+            # 1. Desregistrar DLLs ativas via regsvr32 para liberar travas de Shell Extension / Explorer
             try {
                 $isDir = (Get-Item -LiteralPath $p) -is [System.IO.DirectoryInfo]
+                if ($isDir) {
+                    $dlls = Get-ChildItem -LiteralPath $p -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue
+                    foreach ($dll in $dlls) {
+                        try {
+                            Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$($dll.FullName)`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+                        } catch {}
+                    }
+                } elseif ($p -like "*.dll") {
+                    try {
+                        Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$p`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+                    } catch {}
+                }
+            } catch {}
+
+            try {
                 if ($isDir) {
                     [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
                 } else {
