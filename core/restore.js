@@ -1,9 +1,33 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 
-function createRestorePoint(description = 'Queu Uninstaller') {
+function isElevated() {
+    if (process.platform !== 'win32') return true;
+    try {
+        execSync('net session', { stdio: 'ignore' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function createRestorePoint(description = 'Queu Ponto de Restauração') {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'create_restore.ps1');
+
+        if (!isElevated()) {
+            // Se o processo ainda não estiver em modo Administrador, eleva via RunAs
+            const cmd = `Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${scriptPath}\\" -Description \\"${description}\\"' -Verb RunAs -Wait`;
+            const child = spawn('powershell.exe', ['-NoProfile', '-Command', cmd], { windowsHide: true });
+            child.on('close', (code) => {
+                if (code === 0) {
+                    resolve({ Success: true, Message: `Ponto de restauração '${description}' criado com sucesso!` });
+                } else {
+                    resolve({ Success: false, Message: 'Operação cancelada ou permissão de Administrador negada no UAC.' });
+                }
+            });
+            return;
+        }
 
         const child = spawn('powershell.exe', [
             '-NoProfile',

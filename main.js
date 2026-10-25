@@ -2,12 +2,35 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const { execSync, spawn } = require('child_process');
 const { getInstalledApps, getWindowsApps } = require('./core/inventory');
 const { runUninstall } = require('./core/uninstaller');
 const { scanLeftovers, cleanLeftovers } = require('./core/leftovers');
 const { createRestorePoint } = require('./core/restore');
 const { checkForUpdates, applyUpdate } = require('./core/updater');
 const { scanOrphans, cleanOrphans } = require('./core/orphans');
+
+// Verificação e auto-elevação UAC para Administrador
+function ensureAdmin() {
+    if (process.platform !== 'win32') return true;
+    try {
+        execSync('net session', { stdio: 'ignore' });
+        return true; // Já está rodando com privilégios de Administrador
+    } catch (e) {
+        // Relança como Administrador via PowerShell Verb RunAs
+        const electronPath = process.execPath;
+        const rawArgs = process.argv.slice(1);
+        const argsStr = rawArgs.map(a => `\`"${a}\`"`).join(' ');
+        const argListParam = argsStr.length > 0 ? `-ArgumentList "${argsStr}"` : '';
+        spawn('powershell.exe', [
+            '-NoProfile',
+            '-Command',
+            `Start-Process -FilePath "${electronPath}" ${argListParam} -Verb RunAs`
+        ], { detached: true, stdio: 'ignore' });
+        app.quit();
+        return false;
+    }
+}
 
 let mainWindow = null;
 let isBatchCancelled = false;
@@ -340,6 +363,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    if (!ensureAdmin()) return;
     startInternalServer();
     createWindow();
 

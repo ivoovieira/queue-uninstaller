@@ -1,5 +1,5 @@
 #define MyAppName "Queu Uninstaller"
-#define MyAppVersion "1.3.5"
+#define MyAppVersion "1.3.6"
 #define MyAppPublisher "Queu Uninstaller"
 #define MyAppURL "https://github.com/ivoovieira/queue-uninstaller"
 #define MyAppExeName "QueuUninstaller.exe"
@@ -13,8 +13,8 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
-PrivilegesRequired=none
-PrivilegesRequiredOverridesAllowed=commandline dialog
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=commandline
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=dist\installer
