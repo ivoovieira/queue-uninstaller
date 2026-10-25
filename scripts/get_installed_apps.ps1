@@ -366,6 +366,58 @@ $appList = foreach ($app in $rawApps) {
         }
     }
 
+    # Verificação de Entrada Órfã (Arquivos e pastas ausentes no disco, restando apenas a chave no Registro)
+    $hasValidLocation = $false
+    if ($app.InstallLocation) {
+        $cleanLoc = [Environment]::ExpandEnvironmentVariables($app.InstallLocation.Trim('"').Trim())
+        if ($cleanLoc -and (Test-Path $cleanLoc)) {
+            $hasValidLocation = $true
+        }
+    }
+
+    $hasValidUninstallExe = $false
+    if ($candidateExe) {
+        if (Test-Path $candidateExe) {
+            $hasValidUninstallExe = $true
+        }
+    } elseif ($app.UninstallString) {
+        $uStr = $app.UninstallString.Trim()
+        $extractedExe = ''
+        if ($uStr -match '^\s*"([^"]+?\.exe)"') {
+            $extractedExe = $Matches[1]
+        } elseif ($uStr -match '^\s*([^\s"]+?\.exe)') {
+            $extractedExe = $Matches[1]
+        }
+        if ($extractedExe -and ($extractedExe -notmatch '(?i)msiexec\.exe')) {
+            $extractedExe = [Environment]::ExpandEnvironmentVariables($extractedExe)
+            if (Test-Path $extractedExe) {
+                $hasValidUninstallExe = $true
+            }
+        }
+    }
+
+    $hasValidDisplayExe = $false
+    if ($app.DisplayIcon) {
+        $cleanIconPath = ($app.DisplayIcon -split ',')[0].Trim('"').Trim()
+        $cleanIconPath = [Environment]::ExpandEnvironmentVariables($cleanIconPath)
+        if ($cleanIconPath -and (Test-Path $cleanIconPath) -and ($cleanIconPath -notmatch '(?i)msiexec\.exe')) {
+            $hasValidDisplayExe = $true
+        }
+    }
+
+    $isMsi = ($installerType -eq 'MSI' -or ($app.UninstallString -match '(?i)msiexec\.exe'))
+
+    $isOrphan = $false
+    if (-not $isMsi) {
+        # Se InstallLocation foi registrado mas a pasta não existe no disco, E o desinstalador não existe no disco
+        if ($app.InstallLocation -and (-not $hasValidLocation) -and (-not $hasValidUninstallExe)) {
+            $isOrphan = $true
+        } elseif ((-not $hasValidLocation) -and (-not $hasValidUninstallExe) -and (-not $hasValidDisplayExe)) {
+            # Se não tem pasta válida, não tem desinstalador no disco e não tem display icon no disco
+            $isOrphan = $true
+        }
+    }
+
     # Arquitetura (32-bit vs 64-bit)
     $arch = if ($app.PSPath -match 'Wow6432Node') { '32-bit' } else { '64-bit' }
 
@@ -397,6 +449,7 @@ $appList = foreach ($app in $rawApps) {
         Comments = [string]$app.Comments
         IconBase64 = $iconB64
         RegistryPath = [string]$app.PSPath
+        IsOrphan = [bool]$isOrphan
     }
 }
 

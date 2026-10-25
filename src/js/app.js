@@ -70,6 +70,8 @@ let currentSort = { column: 'name', asc: true };
 let currentLeftovers = null;
 let currentLeftoverApp = null;
 let currentTab = 'programs';
+let cachedPrograms = null;
+let cachedWindowsApps = null;
 
 // Elementos da UI
 const appsTable = document.getElementById('appsTable');
@@ -197,25 +199,48 @@ function setupEventListeners() {
     });
 
     // Botões de Ação
-    document.getElementById('btnRefresh').addEventListener('click', () => refreshCurrentInventory());
+    document.getElementById('btnRefresh').addEventListener('click', () => {
+        showToast('Atualizando lista de aplicativos...', 'info');
+        refreshCurrentInventory(true);
+    });
 
-    // Abas do Ribbon
+    // Abas do Ribbon com Cache Instantâneo (0ms)
     const tabPrograms = document.getElementById('tabPrograms');
     const tabWindowsApps = document.getElementById('tabWindowsApps');
 
-    tabPrograms.addEventListener('click', () => {
-        tabPrograms.classList.add('active');
-        tabWindowsApps.classList.remove('active');
-        currentTab = 'programs';
-        loadApps();
-    });
+    function switchTab(tab) {
+        if (currentTab === tab && allApps && allApps.length > 0) return;
+        currentTab = tab;
 
-    tabWindowsApps.addEventListener('click', async () => {
-        tabWindowsApps.classList.add('active');
-        tabPrograms.classList.remove('active');
-        currentTab = 'windows-apps';
-        loadWindowsApps();
-    });
+        if (tab === 'programs') {
+            tabPrograms.classList.add('active');
+            tabWindowsApps.classList.remove('active');
+            if (cachedPrograms !== null) {
+                allApps = cachedPrograms;
+                loadingState.classList.add('hidden');
+                emptyState.classList.add('hidden');
+                appsTable.classList.remove('hidden');
+                applyFiltersAndRender();
+                return;
+            }
+            loadApps(0, false);
+        } else {
+            tabWindowsApps.classList.add('active');
+            tabPrograms.classList.remove('active');
+            if (cachedWindowsApps !== null) {
+                allApps = cachedWindowsApps;
+                loadingState.classList.add('hidden');
+                emptyState.classList.add('hidden');
+                appsTable.classList.remove('hidden');
+                applyFiltersAndRender();
+                return;
+            }
+            loadWindowsApps(false);
+        }
+    }
+
+    tabPrograms.addEventListener('click', () => switchTab('programs'));
+    tabWindowsApps.addEventListener('click', () => switchTab('windows-apps'));
 
     // Botão Desinstalar Fila no Header
     document.getElementById('btnHeaderBatch').addEventListener('click', () => {
@@ -323,7 +348,9 @@ function setupEventListeners() {
     btnCloseBatchModal.addEventListener('click', () => {
         batchModal.classList.add('hidden');
         deselectAll();
-        refreshCurrentInventory();
+        cachedPrograms = null;
+        cachedWindowsApps = null;
+        refreshCurrentInventory(true);
     });
 
     // Modal de Sobras
@@ -338,51 +365,53 @@ function setupEventListeners() {
     btnCleanSelectedLeftovers.addEventListener('click', executeLeftoverClean);
 }
 
-function refreshCurrentInventory() {
+function refreshCurrentInventory(force = true) {
     if (currentTab === 'windows-apps') {
-        return loadWindowsApps();
+        if (force) cachedWindowsApps = null;
+        return loadWindowsApps(force);
     } else {
-        return loadApps();
+        if (force) cachedPrograms = null;
+        return loadApps(0, force);
     }
 }
 
-function runProgressAnimation({ barElem, percentElem, labelElem, steps, duration = 2600, targetPercent = 94 }) {
-    let currentPct = 0;
-    const startTime = Date.now();
+function runIndeterminateLoading({ containerElem, barElem, percentElem, labelElem, steps, defaultText }) {
+    if (containerElem) containerElem.classList.add('indeterminate');
+    if (percentElem) {
+        percentElem.className = 'loading-active-pill';
+        percentElem.textContent = 'Carregando...';
+    }
     
-    if (barElem) barElem.style.width = '0%';
-    if (percentElem) percentElem.textContent = '0%';
-    if (labelElem && steps && steps.length > 0) labelElem.textContent = steps[0].label;
+    let stepIndex = 0;
+    if (labelElem && steps && steps.length > 0) {
+        labelElem.textContent = steps[0];
+    } else if (labelElem && defaultText) {
+        labelElem.textContent = defaultText;
+    }
 
-    const interval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const linearProgress = Math.min(elapsed / duration, 1);
-        const easeOutProgress = 1 - Math.pow(1 - linearProgress, 2);
-        currentPct = Math.min(Math.round(easeOutProgress * targetPercent), targetPercent);
-
-        if (barElem) barElem.style.width = `${currentPct}%`;
-        if (percentElem) percentElem.textContent = `${currentPct}%`;
-
-        if (steps && labelElem) {
-            for (let i = steps.length - 1; i >= 0; i--) {
-                if (currentPct >= steps[i].pct) {
-                    labelElem.textContent = steps[i].label;
-                    break;
-                }
-            }
-        }
-    }, 50);
+    let interval = null;
+    if (steps && steps.length > 1 && labelElem) {
+        interval = setInterval(() => {
+            stepIndex = (stepIndex + 1) % steps.length;
+            labelElem.textContent = steps[stepIndex];
+        }, 1500);
+    }
 
     return {
-        stop: () => clearInterval(interval),
+        stop: () => {
+            if (interval) clearInterval(interval);
+            if (containerElem) containerElem.classList.remove('indeterminate');
+        },
         finish: () => new Promise(resolve => {
-            clearInterval(interval);
+            if (interval) clearInterval(interval);
+            if (containerElem) containerElem.classList.remove('indeterminate');
             if (barElem) barElem.style.width = '100%';
-            if (percentElem) percentElem.textContent = '100%';
-            if (labelElem && steps && steps.length > 0) {
-                labelElem.textContent = 'Concluído!';
+            if (percentElem) {
+                percentElem.className = '';
+                percentElem.textContent = '100%';
             }
-            setTimeout(resolve, 140);
+            if (labelElem) labelElem.textContent = 'Concluído!';
+            setTimeout(resolve, 80);
         })
     };
 }
@@ -409,8 +438,17 @@ function updateFooterStats() {
     }
 }
 
-async function loadWindowsApps() {
+async function loadWindowsApps(force = false) {
     currentTab = 'windows-apps';
+    if (!force && cachedWindowsApps !== null) {
+        allApps = cachedWindowsApps;
+        loadingState.classList.add('hidden');
+        appsTable.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        applyFiltersAndRender();
+        return;
+    }
+
     loadingState.classList.remove('hidden');
     appsTable.classList.add('hidden');
     emptyState.classList.add('hidden');
@@ -421,22 +459,22 @@ async function loadWindowsApps() {
     if (titleElem) titleElem.textContent = 'Buscando Aplicativos da Microsoft Store...';
     if (subElem) subElem.textContent = 'Consultando pacotes Appx/MSIX instalados e metadados';
 
-    const anim = runProgressAnimation({
+    const anim = runIndeterminateLoading({
+        containerElem: document.querySelector('#loadingState .progress-bar-container'),
         barElem: document.getElementById('loadingProgressBar'),
         percentElem: document.getElementById('loadingPercentLabel'),
         labelElem: document.getElementById('loadingStepLabel'),
         steps: [
-            { pct: 0, label: 'Consultando catálogo Appx/MSIX no Windows...' },
-            { pct: 25, label: 'Filtrando componentes nativos de sistema...' },
-            { pct: 55, label: 'Extraindo logotipos e nomes amigáveis...' },
-            { pct: 80, label: 'Organizando aplicativos de usuário...' }
-        ],
-        duration: 2200,
-        targetPercent: 92
+            'Consultando catálogo Appx/MSIX no Windows...',
+            'Filtrando componentes nativos de sistema...',
+            'Extraindo logotipos e nomes amigáveis...',
+            'Organizando aplicativos de usuário...'
+        ]
     });
 
     try {
         allApps = await window.api.getWindowsApps();
+        cachedWindowsApps = allApps;
         await anim.finish();
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
@@ -450,8 +488,17 @@ async function loadWindowsApps() {
 }
 
 // Carregar inventário de programas
-async function loadApps(retryCount = 0) {
+async function loadApps(retryCount = 0, force = false) {
     currentTab = 'programs';
+    if (!force && cachedPrograms !== null) {
+        allApps = cachedPrograms;
+        loadingState.classList.add('hidden');
+        appsTable.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        applyFiltersAndRender();
+        return;
+    }
+
     loadingState.classList.remove('hidden');
     appsTable.classList.add('hidden');
     emptyState.classList.add('hidden');
@@ -462,23 +509,23 @@ async function loadApps(retryCount = 0) {
     if (titleElem) titleElem.textContent = 'Examinando Registro e Sistema do Windows...';
     if (subElem) subElem.textContent = 'Detectando aplicativos instalados, ícones nativos e estimativa de tamanho';
 
-    const anim = runProgressAnimation({
+    const anim = runIndeterminateLoading({
+        containerElem: document.querySelector('#loadingState .progress-bar-container'),
         barElem: document.getElementById('loadingProgressBar'),
         percentElem: document.getElementById('loadingPercentLabel'),
         labelElem: document.getElementById('loadingStepLabel'),
         steps: [
-            { pct: 0, label: 'Acessando chaves HKLM e HKCU no Registro...' },
-            { pct: 20, label: 'Examinando chaves de 32-bit (Wow6432Node) e 64-bit...' },
-            { pct: 45, label: 'Extraindo ícones nativos e nomes de fabricantes...' },
-            { pct: 70, label: 'Calculando estimativas de tamanho em disco...' },
-            { pct: 88, label: 'Estruturando inventário de programas...' }
-        ],
-        duration: 2600,
-        targetPercent: 93
+            'Lendo chaves do Registro e compilando inventário...',
+            'Examinando instalações de 64-bit e 32-bit (Wow6432Node)...',
+            'Extraindo ícones oficiais nativos e fabricantes...',
+            'Calculando tamanhos estimados e identificando entradas órfãs...',
+            'Estruturando inventário de programas...'
+        ]
     });
 
     try {
         allApps = await window.api.getInstalledApps();
+        cachedPrograms = allApps;
         await anim.finish();
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
@@ -487,7 +534,7 @@ async function loadApps(retryCount = 0) {
         anim.stop();
         if (retryCount < 2) {
             console.log('Tentando reconectar em 1 segundo...');
-            setTimeout(() => loadApps(retryCount + 1), 1000);
+            setTimeout(() => loadApps(retryCount + 1, force), 1000);
             return;
         }
 
@@ -550,6 +597,18 @@ function applyFiltersAndRender() {
     updateFooterStats();
 }
 
+function isGameApp(app) {
+    const text = `${app.DisplayName || ''} ${app.Publisher || ''} ${app.Comments || ''}`.toLowerCase();
+    const gameKeywords = [
+        'game', 'simulator', 'adventure', 'steam', 'hydra', 'gog', 
+        'rpg', 'remastered', 'edition', 'craft', 'need for speed', 
+        'alba', 'goat', 'ubisoft', 'epic games', 'riot games', 'blizzard', 
+        'rockstar', 'ea sports', 'electronic arts', 'bethesda', 'capcom', 
+        'valve', 'bandai', 'square enix', 'playstation', 'xbox'
+    ];
+    return gameKeywords.some(kw => text.includes(kw));
+}
+
 function renderTable() {
     appsTableBody.innerHTML = '';
 
@@ -575,9 +634,24 @@ function renderTable() {
         const dateFormatted = formatDate(app.InstallDate);
         const archBadge = app.Architecture === '64-bit' ? 'badge-64' : 'badge-32';
 
-        const iconHtml = app.IconBase64 
-            ? `<img src="${app.IconBase64}" class="app-icon-img" alt="${escapeHtml(app.DisplayName)}" onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>${initialLetter}</div>'">`
-            : `<div class="app-icon-fallback">${initialLetter}</div>`;
+        let iconHtml = '';
+        if (app.IconBase64) {
+            iconHtml = `<img src="${app.IconBase64}" class="app-icon-img" alt="${escapeHtml(app.DisplayName)}" onerror="this.outerHTML='<div class=\\'app-icon-fallback\\'>${initialLetter}</div>'">`;
+        } else if (isGameApp(app)) {
+            iconHtml = `
+                <div class="app-icon-game" title="Jogo / Simulador">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="6" y1="12" x2="10" y2="12"></line>
+                        <line x1="8" y1="10" x2="8" y2="14"></line>
+                        <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                        <line x1="18" y1="11" x2="18.01" y2="11"></line>
+                        <rect x="2" y="6" width="20" height="12" rx="6"></rect>
+                    </svg>
+                </div>
+            `;
+        } else {
+            iconHtml = `<div class="app-icon-fallback">${initialLetter}</div>`;
+        }
 
         let cleanSiteDisplay = '';
         if (app.WebSite) {
@@ -598,7 +672,10 @@ function renderTable() {
                 <div class="app-info-cell">
                     ${iconHtml}
                     <div class="app-names">
-                        <span class="app-display-name">${escapeHtml(app.DisplayName)}</span>
+                        <span class="app-display-name">
+                            ${escapeHtml(app.DisplayName)}
+                            ${app.IsOrphan ? '<span class="badge-orphan" title="Arquivos ausentes no disco. Apenas chave de registro encontrada.">👻 Órfão</span>' : ''}
+                        </span>
                     </div>
                 </div>
             </td>
@@ -814,7 +891,10 @@ function setupBatchListener() {
 
             batchProgressBar.style.width = `${percent}%`;
             batchProgressLabel.textContent = `Progresso: ${idx} de ${total} (${percent}%)`;
-            batchCurrentAction.textContent = `Desinstalando: ${data.app.DisplayName}`;
+            const isOrphan = data.isOrphan || (data.app && data.app.IsOrphan);
+            batchCurrentAction.textContent = isOrphan 
+                ? `Removendo entrada órfã do Registro: ${data.app.DisplayName}` 
+                : `Desinstalando: ${data.app.DisplayName}`;
 
             document.querySelectorAll('.batch-queue-item').forEach(el => el.classList.remove('active'));
             const currentItem = document.getElementById(`queueItem_${idx}`);
@@ -826,7 +906,7 @@ function setupBatchListener() {
             const badge = document.getElementById(`badge_${idx}`);
             if (badge) {
                 badge.className = 'status-badge uninstalling';
-                badge.textContent = 'Desinstalando...';
+                badge.textContent = isOrphan ? 'Removendo órfão...' : 'Desinstalando...';
             }
         } else if (data.type === 'app-scanning') {
             const idx = data.index;
@@ -874,6 +954,28 @@ function setupBatchListener() {
 
 // Desinstalação individual direta
 async function singleUninstall(app) {
+    if (app.IsOrphan) {
+        const confirm = window.confirm(
+            `Remover entrada órfã de "${app.DisplayName}" do Registro do Windows?\n\n` +
+            `• Os arquivos do programa já foram excluídos do disco anteriormente.\n` +
+            `• O Queu Uninstaller removerá com segurança a chave residual do Registro e atalhos mortos.`
+        );
+        if (!confirm) return;
+
+        showToast(`Removendo entrada órfã de ${app.DisplayName}...`, 'info');
+        const res = await window.api.runSingleUninstall(app, { silent: true });
+
+        // Remove imediatamente da lista em memória e dos caches
+        allApps = allApps.filter(a => a.Id !== app.Id);
+        if (cachedPrograms) cachedPrograms = cachedPrograms.filter(a => a.Id !== app.Id);
+        if (cachedWindowsApps) cachedWindowsApps = cachedWindowsApps.filter(a => a.Id !== app.Id);
+        selectedAppIds.delete(app.Id);
+        applyFiltersAndRender();
+
+        showToast(`Entrada órfã de "${app.DisplayName}" removida com sucesso!`, 'success');
+        return;
+    }
+
     const confirm = window.confirm(`Deseja desinstalar "${app.DisplayName}" agora?\n\nApós o desinstalador, o Queu Uninstaller fará a varredura profunda de sobras no Registro e Pastas.`);
     if (!confirm) return;
 
@@ -882,6 +984,8 @@ async function singleUninstall(app) {
 
     // Remove imediatamente da lista em memória para refletir a nova contagem e tamanho no rodapé
     allApps = allApps.filter(a => a.Id !== app.Id);
+    if (cachedPrograms) cachedPrograms = cachedPrograms.filter(a => a.Id !== app.Id);
+    if (cachedWindowsApps) cachedWindowsApps = cachedWindowsApps.filter(a => a.Id !== app.Id);
     selectedAppIds.delete(app.Id);
     applyFiltersAndRender();
 
@@ -904,19 +1008,18 @@ async function inspectLeftovers(app) {
     const progressBox = document.getElementById('leftoverProgressBox');
     if (progressBox) progressBox.style.display = 'block';
 
-    const anim = runProgressAnimation({
+    const anim = runIndeterminateLoading({
+        containerElem: document.querySelector('#leftoverProgressBox .progress-bar-container'),
         barElem: document.getElementById('leftoverProgressBar'),
         percentElem: document.getElementById('leftoverPercentLabel'),
         labelElem: document.getElementById('leftoverStepLabel'),
         steps: [
-            { pct: 0, label: 'Varrendo chaves e valores no Registro (HKCU/HKLM)...' },
-            { pct: 25, label: 'Verificando subchaves de fabricantes e App Paths...' },
-            { pct: 50, label: 'Buscando diretórios residuais em AppData e Program Files...' },
-            { pct: 75, label: 'Checando regras de Firewall e atalhos órfãos...' },
-            { pct: 90, label: 'Consolidando sobras encontradas...' }
-        ],
-        duration: 2200,
-        targetPercent: 94
+            'Varrendo chaves e valores no Registro (HKCU/HKLM)...',
+            'Verificando subchaves de fabricantes e App Paths...',
+            'Buscando diretórios residuais em AppData e Program Files...',
+            'Checando regras de Firewall e atalhos órfãos...',
+            'Consolidando sobras encontradas...'
+        ]
     });
 
     try {
@@ -1171,19 +1274,18 @@ async function runOrphanScan() {
     btnClean.disabled = true;
     statusText.textContent = 'Verificando resíduos órfãos...';
 
-    const anim = runProgressAnimation({
+    const anim = runIndeterminateLoading({
+        containerElem: document.querySelector('#orphanScanLoading .progress-bar-container'),
         barElem: document.getElementById('orphanProgressBar'),
         percentElem: document.getElementById('orphanPercentLabel'),
         labelElem: document.getElementById('orphanStepLabel'),
         steps: [
-            { pct: 0, label: 'Mapeando programas atualmente instalados...' },
-            { pct: 20, label: 'Varrendo chaves órfãs no Registro (HKCU/HKLM)...' },
-            { pct: 45, label: 'Examinando entradas desativadas em App Paths...' },
-            { pct: 65, label: 'Localizando diretórios abandonados em AppData e Program Files...' },
-            { pct: 85, label: 'Classificando níveis de segurança (Seguro / Revisão)...' }
-        ],
-        duration: 3200,
-        targetPercent: 93
+            'Mapeando programas atualmente instalados...',
+            'Varrendo chaves órfãs no Registro (HKCU/HKLM)...',
+            'Examinando entradas desativadas em App Paths...',
+            'Localizando diretórios abandonados em AppData e Program Files...',
+            'Classificando níveis de segurança (Seguro / Revisão)...'
+        ]
     });
 
     try {

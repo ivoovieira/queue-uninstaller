@@ -46,6 +46,52 @@ function checkRemainingFiles(installLocation) {
 }
 
 async function runUninstall(app, options = {}) {
+    // 0. Ação Segura para Entradas Órfãs (arquivos já ausentes no disco)
+    if (app && app.IsOrphan) {
+        return new Promise((resolve) => {
+            const cleanScript = path.join(__dirname, '..', 'scripts', 'clean_leftovers.ps1');
+            const orphanRegItems = [];
+            if (app.RegistryPath) {
+                orphanRegItems.push({
+                    KeyPath: app.RegistryPath,
+                    Description: `Chave órfã de desinstalação (${app.DisplayName})`
+                });
+            }
+            const cleanPayload = {
+                RegistryLeftovers: orphanRegItems,
+                FileSystemLeftovers: []
+            };
+
+            const child = spawn('powershell.exe', [
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', cleanScript,
+                '-ItemsJson', JSON.stringify(cleanPayload)
+            ], { windowsHide: true });
+
+            let stdout = '';
+            child.stdout.on('data', d => stdout += d.toString('utf8'));
+            child.on('close', (code) => {
+                resolve({
+                    success: code === 0,
+                    isOrphan: true,
+                    message: 'Entrada órfã removida com sucesso diretamente do Registro do Windows.',
+                    lockedProcessesKilled: [],
+                    stillExists: false
+                });
+            });
+            child.on('error', (err) => {
+                resolve({
+                    success: false,
+                    isOrphan: true,
+                    error: err.message,
+                    lockedProcessesKilled: [],
+                    stillExists: false
+                });
+            });
+        });
+    }
+
     // 1. Encerramento preventivo de processos ativos vinculados ao aplicativo
     const killResult = await killActiveLocks(app);
 

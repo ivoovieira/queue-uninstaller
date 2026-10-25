@@ -263,7 +263,11 @@ async function runBatchQueue(apps, options = {}) {
         }
 
         const currentApp = apps[i];
-        notify({ type: 'app-start', index: i, total, app: currentApp });
+        if (currentApp.IsOrphan) {
+            notify({ type: 'app-start', index: i, total, app: currentApp, isOrphan: true });
+        } else {
+            notify({ type: 'app-start', index: i, total, app: currentApp });
+        }
 
         const uninstallRes = await runUninstall(currentApp, {
             silent: options.silentMode !== false
