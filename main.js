@@ -10,25 +10,18 @@ const { createRestorePoint } = require('./core/restore');
 const { checkForUpdates, applyUpdate } = require('./core/updater');
 const { scanOrphans, cleanOrphans } = require('./core/orphans');
 
-// Verificação e auto-elevação UAC para Administrador
-function ensureAdmin() {
-    if (process.platform !== 'win32') return true;
+// Checagem de privilégios de Administrador sem interromper ou fechar o app
+let isRunningAsAdmin = false;
+function checkAdminPrivileges() {
+    if (process.platform !== 'win32') {
+        isRunningAsAdmin = true;
+        return;
+    }
     try {
         execSync('net session', { stdio: 'ignore' });
-        return true; // Já está rodando com privilégios de Administrador
+        isRunningAsAdmin = true;
     } catch (e) {
-        // Relança como Administrador via PowerShell Verb RunAs
-        const electronPath = process.execPath;
-        const rawArgs = process.argv.slice(1);
-        const argsStr = rawArgs.map(a => `\`"${a}\`"`).join(' ');
-        const argListParam = argsStr.length > 0 ? `-ArgumentList "${argsStr}"` : '';
-        spawn('powershell.exe', [
-            '-NoProfile',
-            '-Command',
-            `Start-Process -FilePath "${electronPath}" ${argListParam} -Verb RunAs`
-        ], { detached: true, stdio: 'ignore' });
-        app.quit();
-        return false;
+        isRunningAsAdmin = false;
     }
 }
 
@@ -373,7 +366,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-    if (!ensureAdmin()) return;
+    checkAdminPrivileges();
     startInternalServer();
     createWindow();
 
@@ -433,6 +426,10 @@ ipcMain.handle('cancel-batch', () => {
 ipcMain.handle('start-batch-uninstall', async (event, apps, options = {}) => {
     runBatchQueue(apps, options);
     return { success: true };
+});
+
+ipcMain.handle('is-admin', () => {
+    return isRunningAsAdmin;
 });
 
 ipcMain.handle('check-for-updates', async () => {

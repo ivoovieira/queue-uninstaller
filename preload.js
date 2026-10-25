@@ -12,6 +12,7 @@ const api = {
     openFolder: (folderPath) => ipcRenderer.invoke('open-folder', folderPath),
     scanOrphans: () => ipcRenderer.invoke('scan-orphans'),
     cleanOrphans: (items) => ipcRenderer.invoke('clean-orphans', items),
+    isAdmin: () => ipcRenderer.invoke('is-admin'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     applyUpdate: () => ipcRenderer.invoke('apply-update'),
     
