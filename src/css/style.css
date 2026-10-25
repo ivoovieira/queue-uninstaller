@@ -793,6 +793,29 @@ body {
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 
+.loading-progress-box {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.loading-progress-header {
+    display: flex;
+    justify-content: space-between;
+    width: 380px;
+    max-width: 90vw;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.loading-progress-header b {
+    color: #3b82f6;
+    font-weight: 700;
+}
+
 .toast-container {
     position: fixed;
     bottom: 24px;

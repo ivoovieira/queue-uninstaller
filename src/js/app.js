@@ -346,6 +346,47 @@ function refreshCurrentInventory() {
     }
 }
 
+function runProgressAnimation({ barElem, percentElem, labelElem, steps, duration = 2600, targetPercent = 94 }) {
+    let currentPct = 0;
+    const startTime = Date.now();
+    
+    if (barElem) barElem.style.width = '0%';
+    if (percentElem) percentElem.textContent = '0%';
+    if (labelElem && steps && steps.length > 0) labelElem.textContent = steps[0].label;
+
+    const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const linearProgress = Math.min(elapsed / duration, 1);
+        const easeOutProgress = 1 - Math.pow(1 - linearProgress, 2);
+        currentPct = Math.min(Math.round(easeOutProgress * targetPercent), targetPercent);
+
+        if (barElem) barElem.style.width = `${currentPct}%`;
+        if (percentElem) percentElem.textContent = `${currentPct}%`;
+
+        if (steps && labelElem) {
+            for (let i = steps.length - 1; i >= 0; i--) {
+                if (currentPct >= steps[i].pct) {
+                    labelElem.textContent = steps[i].label;
+                    break;
+                }
+            }
+        }
+    }, 50);
+
+    return {
+        stop: () => clearInterval(interval),
+        finish: () => new Promise(resolve => {
+            clearInterval(interval);
+            if (barElem) barElem.style.width = '100%';
+            if (percentElem) percentElem.textContent = '100%';
+            if (labelElem && steps && steps.length > 0) {
+                labelElem.textContent = 'Concluído!';
+            }
+            setTimeout(resolve, 140);
+        })
+    };
+}
+
 function updateFooterStats() {
     const isWindowsApps = currentTab === 'windows-apps';
     const typeLabel = isWindowsApps ? 'app da Store' : 'programa';
@@ -375,18 +416,36 @@ async function loadWindowsApps() {
     emptyState.classList.add('hidden');
     statTotalApps.textContent = 'Buscando Windows Apps...';
 
+    const titleElem = document.getElementById('loadingTitle');
+    const subElem = document.getElementById('loadingSub');
+    if (titleElem) titleElem.textContent = 'Buscando Aplicativos da Microsoft Store...';
+    if (subElem) subElem.textContent = 'Consultando pacotes Appx/MSIX instalados e metadados';
+
+    const anim = runProgressAnimation({
+        barElem: document.getElementById('loadingProgressBar'),
+        percentElem: document.getElementById('loadingPercentLabel'),
+        labelElem: document.getElementById('loadingStepLabel'),
+        steps: [
+            { pct: 0, label: 'Consultando catálogo Appx/MSIX no Windows...' },
+            { pct: 25, label: 'Filtrando componentes nativos de sistema...' },
+            { pct: 55, label: 'Extraindo logotipos e nomes amigáveis...' },
+            { pct: 80, label: 'Organizando aplicativos de usuário...' }
+        ],
+        duration: 2200,
+        targetPercent: 92
+    });
+
     try {
         allApps = await window.api.getWindowsApps();
+        await anim.finish();
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
         applyFiltersAndRender();
     } catch (err) {
-        loadingState.innerHTML = `
-            <div style="color: var(--accent-red); font-size: 2rem;">⚠️</div>
-            <h3>Erro ao obter aplicativos da Store</h3>
-            <p>${err.message}</p>
-            <button class="btn btn-secondary" onclick="loadWindowsApps()">Tentar Novamente</button>
-        `;
+        anim.stop();
+        showToast(`Erro ao listar Windows Apps: ${err.message}`, 'error');
+        loadingState.classList.add('hidden');
+        emptyState.classList.remove('hidden');
     }
 }
 
@@ -398,24 +457,43 @@ async function loadApps(retryCount = 0) {
     emptyState.classList.add('hidden');
     statTotalApps.textContent = 'Examinando programas...';
 
+    const titleElem = document.getElementById('loadingTitle');
+    const subElem = document.getElementById('loadingSub');
+    if (titleElem) titleElem.textContent = 'Examinando Registro e Sistema do Windows...';
+    if (subElem) subElem.textContent = 'Detectando aplicativos instalados, ícones nativos e estimativa de tamanho';
+
+    const anim = runProgressAnimation({
+        barElem: document.getElementById('loadingProgressBar'),
+        percentElem: document.getElementById('loadingPercentLabel'),
+        labelElem: document.getElementById('loadingStepLabel'),
+        steps: [
+            { pct: 0, label: 'Acessando chaves HKLM e HKCU no Registro...' },
+            { pct: 20, label: 'Examinando chaves de 32-bit (Wow6432Node) e 64-bit...' },
+            { pct: 45, label: 'Extraindo ícones nativos e nomes de fabricantes...' },
+            { pct: 70, label: 'Calculando estimativas de tamanho em disco...' },
+            { pct: 88, label: 'Estruturando inventário de programas...' }
+        ],
+        duration: 2600,
+        targetPercent: 93
+    });
+
     try {
         allApps = await window.api.getInstalledApps();
+        await anim.finish();
         loadingState.classList.add('hidden');
         appsTable.classList.remove('hidden');
         applyFiltersAndRender();
     } catch (err) {
+        anim.stop();
         if (retryCount < 2) {
             console.log('Tentando reconectar em 1 segundo...');
             setTimeout(() => loadApps(retryCount + 1), 1000);
             return;
         }
 
-        loadingState.innerHTML = `
-            <div style="color: var(--accent-red); font-size: 2rem;">⚠️</div>
-            <h3>Erro ao obter lista de programas</h3>
-            <p>${err.message}</p>
-            <button class="btn btn-secondary" onclick="loadApps(0)">Tentar Novamente</button>
-        `;
+        showToast(`Erro ao obter lista de programas: ${err.message}`, 'error');
+        loadingState.classList.add('hidden');
+        emptyState.classList.remove('hidden');
     }
 }
 
@@ -823,8 +901,28 @@ async function inspectLeftovers(app) {
     leftoverRegList.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Examinando chaves e pastas...</div>';
     leftoverFileList.innerHTML = '<div style="padding: 10px; color: var(--text-muted);">Examinando diretórios residuais...</div>';
 
+    const progressBox = document.getElementById('leftoverProgressBox');
+    if (progressBox) progressBox.style.display = 'block';
+
+    const anim = runProgressAnimation({
+        barElem: document.getElementById('leftoverProgressBar'),
+        percentElem: document.getElementById('leftoverPercentLabel'),
+        labelElem: document.getElementById('leftoverStepLabel'),
+        steps: [
+            { pct: 0, label: 'Varrendo chaves e valores no Registro (HKCU/HKLM)...' },
+            { pct: 25, label: 'Verificando subchaves de fabricantes e App Paths...' },
+            { pct: 50, label: 'Buscando diretórios residuais em AppData e Program Files...' },
+            { pct: 75, label: 'Checando regras de Firewall e atalhos órfãos...' },
+            { pct: 90, label: 'Consolidando sobras encontradas...' }
+        ],
+        duration: 2200,
+        targetPercent: 94
+    });
+
     try {
         const result = await window.api.scanLeftovers(app, 'Moderate');
+        await anim.finish();
+        if (progressBox) progressBox.style.display = 'none';
         currentLeftovers = result;
 
         leftoverRegCount.textContent = result.TotalRegistryCount;
@@ -1073,13 +1171,30 @@ async function runOrphanScan() {
     btnClean.disabled = true;
     statusText.textContent = 'Verificando resíduos órfãos...';
 
+    const anim = runProgressAnimation({
+        barElem: document.getElementById('orphanProgressBar'),
+        percentElem: document.getElementById('orphanPercentLabel'),
+        labelElem: document.getElementById('orphanStepLabel'),
+        steps: [
+            { pct: 0, label: 'Mapeando programas atualmente instalados...' },
+            { pct: 20, label: 'Varrendo chaves órfãs no Registro (HKCU/HKLM)...' },
+            { pct: 45, label: 'Examinando entradas desativadas em App Paths...' },
+            { pct: 65, label: 'Localizando diretórios abandonados em AppData e Program Files...' },
+            { pct: 85, label: 'Classificando níveis de segurança (Seguro / Revisão)...' }
+        ],
+        duration: 3200,
+        targetPercent: 93
+    });
+
     try {
         const result = await window.api.scanOrphans();
+        await anim.finish();
         orphanItems = result.Items || [];
         updateOrphanStats(result);
         renderOrphanItems();
         statusText.textContent = `Varredura concluída (${orphanItems.length} resíduos encontrados)`;
     } catch (e) {
+        anim.stop();
         listContainer.innerHTML = `
             <div style="text-align: center; color: var(--accent-red); padding: 30px;">
                 Erro ao varrer resíduos órfãos: ${escapeHtml(e.message)}

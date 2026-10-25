@@ -328,6 +328,7 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
     mainWindow.once('ready-to-show', () => {
+        mainWindow.maximize();
         mainWindow.show();
     });
 
