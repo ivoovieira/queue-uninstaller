@@ -359,11 +359,10 @@ ipcMain.handle('check-for-updates', async () => {
 
 ipcMain.handle('apply-update', async () => {
     const res = await applyUpdate();
-    if (res.success && app.relaunch) {
+    if (res.success) {
         setTimeout(() => {
-            app.relaunch();
-            app.exit(0);
-        }, 1500);
+            app.quit();
+        }, 1200);
     }
     return res;
 });

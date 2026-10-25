@@ -5,12 +5,12 @@ const os = require('os');
 const { spawn, exec } = require('child_process');
 
 const pkgPath = path.join(__dirname, '..', 'package.json');
-let pkg = { version: '1.2.2' };
+let pkg = { version: '1.2.3' };
 try {
     pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 } catch (e) {}
 
-const CURRENT_VERSION = pkg.version || '1.2.2';
+const CURRENT_VERSION = pkg.version || '1.2.3';
 const GITHUB_REPO = 'ivoovieira/queue-uninstaller';
 
 function httpGetJson(url) {
@@ -153,15 +153,11 @@ async function applyUpdate() {
 
     if (updateInfo.downloadUrl) {
         try {
-            const tempInstaller = path.join(os.tmpdir(), 'QueuUninstaller-Setup-Update.exe');
-            if (fs.existsSync(tempInstaller)) {
-                try { fs.unlinkSync(tempInstaller); } catch (e) {}
-            }
-
+            const tempInstaller = path.join(os.tmpdir(), `QueuUninstaller-Setup-${Date.now()}.exe`);
             await downloadFile(updateInfo.downloadUrl, tempInstaller);
 
             // Dispara o instalador desanexado do processo atual
-            const child = spawn(tempInstaller, ['/SILENT'], {
+            const child = spawn(tempInstaller, [], {
                 detached: true,
                 stdio: 'ignore'
             });
@@ -170,7 +166,7 @@ async function applyUpdate() {
             return {
                 success: true,
                 isInstaller: true,
-                message: 'Instalador baixado com sucesso. O assistente de atualização foi iniciado.'
+                message: 'Instalador baixado com sucesso! O aplicativo será fechado para aplicar a atualização.'
             };
         } catch (err) {
             return { success: false, message: `Erro ao baixar instalador: ${err.message}` };
