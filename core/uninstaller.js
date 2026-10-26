@@ -112,7 +112,8 @@ async function runUninstall(app, options = {}) {
             });
         }
 
-        const needsElevation = !isElevated() && (
+        const isAppx = (commandToRun && commandToRun.toLowerCase().includes('remove-appxpackage')) || !!app.PackageFamilyName;
+        const needsElevation = !isAppx && !isElevated() && (
             (app.RegistryPath && (app.RegistryPath.toLowerCase().includes('hklm') || app.RegistryPath.toLowerCase().includes('hkey_local_machine'))) ||
             (app.InstallLocation && (app.InstallLocation.toLowerCase().includes('program files') || app.InstallLocation.toLowerCase().includes('programdata'))) ||
             (commandToRun && (commandToRun.toLowerCase().includes('program files') || commandToRun.toLowerCase().includes('msiexec') || commandToRun.toLowerCase().includes('system32')))

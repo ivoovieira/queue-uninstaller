@@ -140,6 +140,7 @@ function cleanLeftovers(items) {
         const needsElevation = !isElevated() && (
             ((items && items.FileSystemLeftovers) || []).some(item => {
                 const p = (item.Path || '').toLowerCase();
+                if (p.includes('windowsapps')) return false;
                 return p.includes('program files') || p.includes('programdata') || p.includes('windows');
             }) ||
             ((items && items.RegistryLeftovers) || []).some(item => {

@@ -5,12 +5,12 @@ const os = require('os');
 const { spawn, exec } = require('child_process');
 
 const pkgPath = path.join(__dirname, '..', 'package.json');
-let pkg = { version: '1.4.7' };
+let pkg = { version: '1.4.8' };
 try {
     pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 } catch (e) {}
 
-const CURRENT_VERSION = pkg.version || '1.4.7';
+const CURRENT_VERSION = pkg.version || '1.4.8';
 const GITHUB_REPO = 'ivoovieira/queue-uninstaller';
 
 function httpGetJson(url) {

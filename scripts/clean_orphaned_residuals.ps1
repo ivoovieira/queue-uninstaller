@@ -14,7 +14,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
 
 $forbiddenFolders = @(
     "C:\", "C:\Windows", "C:\Windows\System32", "C:\Program Files", "C:\Program Files (x86)",
-    "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
+    "C:\Program Files\WindowsApps", "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
     "$env:LOCALAPPDATA\Programs", "$env:TEMP", "C:\Users\Public", "C:\Users\Default"
 ) | ForEach-Object { $_.TrimEnd('\').ToLower() }
 

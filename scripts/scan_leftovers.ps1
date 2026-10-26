@@ -19,7 +19,7 @@ param(
 
 $forbiddenFolders = @(
     "C:\", "C:\Windows", "C:\Windows\System32", "C:\Program Files", "C:\Program Files (x86)",
-    "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
+    "C:\Program Files\WindowsApps", "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
     "$env:LOCALAPPDATA\Programs", "$env:TEMP", "C:\Users\Public"
 ) | ForEach-Object { $_.TrimEnd('\').ToLower() }
 
@@ -88,7 +88,7 @@ if ($InstallLocation) {
     if (Test-Path $normLocation) {
         $normLocLower = $normLocation.TrimEnd('\').ToLower()
         $normInstallLoc = $normLocLower
-        if (-not ($forbiddenFolders -contains $normLocLower)) {
+        if (-not ($forbiddenFolders -contains $normLocLower) -and -not ($normLocLower.Contains("windowsapps"))) {
             try {
                 $fCount = (Get-ChildItem -Path $normLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
                 $fSize = (Get-ChildItem -Path $normLocation -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum

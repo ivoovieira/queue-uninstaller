@@ -17,7 +17,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction SilentlyContinue
 
 $forbiddenFolders = @(
     "C:\", "C:\Windows", "C:\Windows\System32", "C:\Program Files", "C:\Program Files (x86)",
-    "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
+    "C:\Program Files\WindowsApps", "C:\ProgramData", "C:\Users", "$env:USERPROFILE", "$env:APPDATA", "$env:LOCALAPPDATA",
     "$env:LOCALAPPDATA\Programs", "$env:TEMP", "C:\Users\Public"
 ) | ForEach-Object { $_.TrimEnd('\').ToLower() }
 
@@ -93,18 +93,8 @@ function Remove-ResidualFileSystemItem($targetPath) {
                 }
             } catch {}
         }
-    }
 
-    # 3. Tentar exclusão segura via Lixeira
-    try {
-        if ($isDir) {
-            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($targetPath, 'OnlyErrorDialogs', 'SendToRecycleBin')
-        } else {
-            [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($targetPath, 'OnlyErrorDialogs', 'SendToRecycleBin')
-        }
-        return "enviado à Lixeira"
-    } catch {
-        # 4. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
+        # Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations) silenciosamente
         try {
             $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
             if (Test-Path $sessionMgr) {
@@ -121,14 +111,14 @@ function Remove-ResidualFileSystemItem($targetPath) {
     }
 }
 
-# 1. Deletar arquivos e pastas (com envio seguro para a Lixeira e liberação de DLLs)
+# 1. Deletar arquivos e pastas (com liberação de DLLs)
 if ($data.FileSystemLeftovers) {
     foreach ($item in $data.FileSystemLeftovers) {
         $p = $item.Path
         if (-not $p) { continue }
         $normP = $p.TrimEnd('\').ToLower()
-        if ($forbiddenFolders -contains $normP) {
-            $errors.Add("Proteção de Segurança: Impedida a exclusão de pasta crítica do sistema: $p")
+        if ($forbiddenFolders -contains $normP -or $normP.Contains("windowsapps")) {
+            $errors.Add("Proteção de Segurança: Impedida a exclusão de pasta crítica ou de sistema: $p")
             continue
         }
 
