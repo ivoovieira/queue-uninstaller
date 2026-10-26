@@ -46,7 +46,10 @@ $keys = @(
 )
 
 $rawApps = @(Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { 
-    $_.DisplayName -and ($_.DisplayName.Trim() -ne '') -and ($_.SystemComponent -ne 1) -and (-not $_.ParentKeyName)
+    $_.DisplayName -and ($_.DisplayName.Trim() -ne '') -and (-not $_.ParentKeyName) -and (
+        ($_.SystemComponent -ne 1) -or 
+        ($_.DisplayName -match '(?i)(Windows Subsystem for Linux|WSL|PowerToys|Windows Subsystem for Android)')
+    )
 })
 
 $totalApps = $rawApps.Count
@@ -117,6 +120,18 @@ function Get-IconBase64($iconPath, $installLoc, $uninstallStr, $displayName, $ap
         if ($steamAppId) {
             $steamIco = Join-Path $steamGamesPath "$steamAppId.ico"
             if (Test-Path $steamIco) { $candidate = $steamIco }
+        }
+    }
+
+    # Suporte específico a Windows Subsystem for Linux (WSL / WSL Settings)
+    if (-not $candidate -and ($displayName -match '(?i)(Windows Subsystem for Linux|WSL)')) {
+        $wslInstallerIco = "C:\WINDOWS\Installer\$appId\wsl.ico"
+        if (Test-Path $wslInstallerIco) {
+            $candidate = $wslInstallerIco
+        } elseif (Test-Path "C:\Program Files\WSL\wslsettings\wslsettings.exe") {
+            $candidate = "C:\Program Files\WSL\wslsettings\wslsettings.exe"
+        } elseif (Test-Path "C:\Program Files\WSL\wsl.exe") {
+            $candidate = "C:\Program Files\WSL\wsl.exe"
         }
     }
 
@@ -443,21 +458,33 @@ $appList = foreach ($app in $rawApps) {
     # Ícone oficial em Base64 com cascata de prioridades
     $iconB64 = Get-IconBase64 -iconPath $app.DisplayIcon -installLoc $app.InstallLocation -uninstallStr $app.UninstallString -displayName $app.DisplayName -appId $app.PSChildName
 
+    $finalDisplayName = [string]$app.DisplayName.Trim()
+    $finalComments = [string]$app.Comments
+    $finalInstallLoc = [string]$app.InstallLocation
+
+    if ($finalDisplayName -match '(?i)^Windows Subsystem for Linux') {
+        $finalDisplayName = 'Windows Subsystem for Linux (WSL / WSL Settings)'
+        $finalComments = "WSL, WSL Settings, Linux, Configurações do WSL, Subsistema do Windows para Linux $finalComments".Trim()
+        if (-not $finalInstallLoc -and (Test-Path "C:\Program Files\WSL")) {
+            $finalInstallLoc = "C:\Program Files\WSL"
+        }
+    }
+
     [PSCustomObject]@{
         Id = [string]$app.PSChildName
-        DisplayName = [string]$app.DisplayName.Trim()
+        DisplayName = $finalDisplayName
         DisplayVersion = [string]$app.DisplayVersion
         Publisher = [string]$app.Publisher
         InstallDate = [string]$app.InstallDate
         EstimatedSizeKb = $sizeKb
-        InstallLocation = [string]$app.InstallLocation
+        InstallLocation = $finalInstallLoc
         UninstallString = [string]$app.UninstallString
         QuietUninstallString = $bestQuiet
         RawQuietString = [string]$app.QuietUninstallString
         InstallerType = $installerType
         Architecture = $arch
         WebSite = $webSite
-        Comments = [string]$app.Comments
+        Comments = $finalComments
         IconBase64 = $iconB64
         RegistryPath = [string]$app.PSPath
         IsOrphan = [bool]$isOrphan

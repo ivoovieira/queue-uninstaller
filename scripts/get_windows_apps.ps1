@@ -79,6 +79,11 @@ $appList = foreach ($a in $rawApps) {
         "Aplicativo da Microsoft Store / Windows"
     }
 
+    if ($friendlyName -match '(?i)Windows Subsystem for Linux|WSL') {
+        $friendlyName = 'Windows Subsystem for Linux (WSL / WSL Settings)'
+        $comments = "WSL, WSL Settings, Linux, Configurações do WSL $comments"
+    }
+
     [PSCustomObject]@{
         Id = [string]$a.PackageFullName
         DisplayName = $friendlyName

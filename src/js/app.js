@@ -692,13 +692,12 @@ function applyFiltersAndRender() {
     const term = searchInput.value.toLowerCase().trim();
 
     filteredApps = allApps.filter(app => {
-        // Busca textual
+        // Busca textual inteligente (multi-palavras / tokenizada)
         if (term) {
-            const nameMatch = (app.DisplayName || '').toLowerCase().includes(term);
-            const pubMatch = (app.Publisher || '').toLowerCase().includes(term);
-            const idMatch = (app.Id || '').toLowerCase().includes(term);
-            const commentMatch = (app.Comments || '').toLowerCase().includes(term);
-            if (!nameMatch && !pubMatch && !idMatch && !commentMatch) return false;
+            const searchWords = term.split(/\s+/).filter(Boolean);
+            const searchableText = `${app.DisplayName || ''} ${app.Publisher || ''} ${app.Id || ''} ${app.Comments || ''}`.toLowerCase();
+            const matchesAllWords = searchWords.every(word => searchableText.includes(word));
+            if (!matchesAllWords) return false;
         }
 
         // Filtros rápidos
