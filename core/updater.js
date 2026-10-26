@@ -156,8 +156,9 @@ async function applyUpdate() {
             const tempInstaller = path.join(os.tmpdir(), `QueuUninstaller-Setup-${Date.now()}.exe`);
             await downloadFile(updateInfo.downloadUrl, tempInstaller);
 
-            // Dispara o instalador desanexado do processo atual
-            const child = spawn(tempInstaller, [], {
+            // Dispara o instalador desanexado com privilégios de Administrador garantidos via RunAs
+            const psCmd = `Start-Process -FilePath "${tempInstaller}" -ArgumentList "/SILENT /CLOSEAPPLICATIONS" -Verb RunAs`;
+            const child = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', psCmd], {
                 detached: true,
                 stdio: 'ignore'
             });
