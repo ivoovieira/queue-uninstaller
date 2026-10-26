@@ -10,18 +10,48 @@ const { createRestorePoint } = require('./core/restore');
 const { checkForUpdates, applyUpdate } = require('./core/updater');
 const { scanOrphans, cleanOrphans } = require('./core/orphans');
 
-// Checagem de privilégios de Administrador sem interromper ou fechar o app
+// Checagem e garantia de privilégios de Administrador
 let isRunningAsAdmin = false;
 function checkAdminPrivileges() {
     if (process.platform !== 'win32') {
         isRunningAsAdmin = true;
-        return;
+        return true;
     }
     try {
         execSync('net session', { stdio: 'ignore' });
         isRunningAsAdmin = true;
+        return true;
     } catch (e) {
         isRunningAsAdmin = false;
+        return false;
+    }
+}
+
+function ensureAdminElevation() {
+    if (process.platform !== 'win32') return true;
+    if (checkAdminPrivileges()) return true;
+
+    // Se já tentou auto-elevar ou passou flag de ignorar, segue sem loop
+    if (process.argv.includes('--no-admin-relaunch') || process.argv.includes('--elevated-attempt')) {
+        return true;
+    }
+
+    try {
+        const exe = process.execPath;
+        const remainingArgs = process.argv.slice(1).concat(['--elevated-attempt']);
+        const argString = remainingArgs.map(a => `"${a.replace(/"/g, '`"')}"`).join(' ');
+        const psCmd = `Start-Process -FilePath "${exe}" -ArgumentList '${argString}' -Verb RunAs`;
+
+        spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', psCmd], {
+            detached: true,
+            stdio: 'ignore'
+        }).unref();
+
+        app.quit();
+        return false;
+    } catch (err) {
+        console.error('Falha ao auto-elevar processo:', err);
+        return true;
     }
 }
 
@@ -379,7 +409,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-    checkAdminPrivileges();
+    if (!ensureAdminElevation()) {
+        return;
+    }
     startInternalServer();
     createWindow();
 

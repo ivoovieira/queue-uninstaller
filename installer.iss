@@ -1,5 +1,5 @@
 #define MyAppName "Queu Uninstaller"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyAppPublisher "Queu Uninstaller"
 #define MyAppURL "https://github.com/ivoovieira/queue-uninstaller"
 #define MyAppExeName "QueuUninstaller.exe"
@@ -57,6 +57,31 @@ begin
 
   Result := True;
 end;
+
+procedure SetRunAsAdmin(const Filename: String);
+var
+  ErrorCode: Integer;
+begin
+  if FileExists(Filename) then
+  begin
+    Exec('powershell.exe', '-NoProfile -WindowStyle Hidden -Command "$p=''' + Filename + '''; if (Test-Path $p) { $b = [System.IO.File]::ReadAllBytes($p); $b[0x15] = $b[0x15] -bor 0x20; [System.IO.File]::WriteAllBytes($p, $b) }"', '', SW_HIDE, ewWaitUntilTerminated, ErrorCode);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    SetRunAsAdmin(ExpandConstant('{autoprograms}\{#MyAppName}.lnk'));
+    SetRunAsAdmin(ExpandConstant('{autodesktop}\{#MyAppName}.lnk'));
+    SetRunAsAdmin(ExpandConstant('{userdesktop}\{#MyAppName}.lnk'));
+    SetRunAsAdmin(ExpandConstant('{commondesktop}\{#MyAppName}.lnk'));
+  end;
+end;
+
+[Registry]
+Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\{#MyAppExeName}"; ValueData: "~ RUNASADMIN"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: string; ValueName: "{app}\{#MyAppExeName}"; ValueData: "~ RUNASADMIN"; Flags: uninsdeletevalue
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
