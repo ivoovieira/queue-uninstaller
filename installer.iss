@@ -1,5 +1,5 @@
 #define MyAppName "Queu Uninstaller"
-#define MyAppVersion "1.5.1"
+#define MyAppVersion "1.5.2"
 #define MyAppPublisher "Queu Uninstaller"
 #define MyAppURL "https://github.com/ivoovieira/queue-uninstaller"
 #define MyAppExeName "QueuUninstaller.exe"
@@ -20,7 +20,7 @@ PrivilegesRequiredOverridesAllowed=commandline
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=dist\installer
-OutputBaseFilename=QueuUninstaller-Setup
+OutputBaseFilename=QueuUninstaller-Setup-v{#MyAppVersion}
 SetupIconFile=icon.ico
 Compression=lzma2
 SolidCompression=yes
