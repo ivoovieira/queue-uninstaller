@@ -303,6 +303,7 @@ body {
 /* Table */
 .table-container {
     flex: 1;
+    overflow-x: auto;
     overflow-y: auto;
     position: relative;
     background-color: var(--bg-dark);
@@ -314,8 +315,10 @@ body {
 }
 
 .apps-table {
-    width: 100%;
-    border-collapse: collapse;
+    min-width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 0.85rem;
 }
 
@@ -332,6 +335,10 @@ body {
     border-bottom: 1px solid var(--border-color);
     border-right: 1px solid rgba(255, 255, 255, 0.04);
     z-index: 10;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: none;
 }
 
 .apps-table th.sortable {
@@ -349,11 +356,51 @@ body {
     opacity: 0.5;
 }
 
+/* Col Resizer */
+.col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 25;
+}
+
+.col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    right: 3px;
+    width: 2px;
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 1px;
+    transition: background-color 0.15s, width 0.15s;
+}
+
+.col-resizer:hover::after,
+.col-resizer.is-resizing::after {
+    background-color: #3b82f6;
+    width: 3px;
+    right: 2px;
+}
+
+body.table-resizing,
+body.table-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
 .apps-table td {
     padding: 8px 12px;
     border-bottom: 1px solid #162032;
     color: var(--text-primary);
     vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .apps-table tr {
@@ -1053,6 +1100,10 @@ body {
     height: 28px;
     object-fit: contain;
     flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background-color: #0b1120;
+    padding: 2px;
+    border: 1px solid var(--border-color);
 }
 
 .batch-confirm-app-details {

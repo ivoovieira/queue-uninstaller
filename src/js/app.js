@@ -186,7 +186,8 @@ function setupEventListeners() {
 
     // Ordenação de colunas
     document.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
+        th.addEventListener('click', (e) => {
+            if (e.target.closest('.col-resizer')) return;
             const col = th.dataset.sort;
             if (currentSort.column === col) {
                 currentSort.asc = !currentSort.asc;
@@ -392,6 +393,120 @@ function setupEventListeners() {
         refreshCurrentInventory();
     });
     btnCleanSelectedLeftovers.addEventListener('click', executeLeftoverClean);
+
+    // Inicializa o redimensionamento arrastável das colunas da tabela
+    setupTableColumnResizing();
+}
+
+// Redimensionamento interativo e persistente das colunas da tabela
+function setupTableColumnResizing() {
+    const table = document.getElementById('appsTable');
+    if (!table) return;
+
+    const ths = table.querySelectorAll('thead th');
+    if (!ths.length) return;
+
+    const storageKey = 'queu_table_col_widths_v2';
+    const minWidths = [48, 160, 75, 75, 65, 95, 90, 90, 110];
+    const defaultWidths = [48, 280, 110, 100, 85, 130, 160, 150, 140];
+
+    let savedWidths = null;
+    try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) savedWidths = JSON.parse(raw);
+    } catch (_) {}
+
+    function applyWidths(widths) {
+        let total = 0;
+        ths.forEach((th, idx) => {
+            const w = widths[idx] || defaultWidths[idx] || 100;
+            const minW = minWidths[idx] || 48;
+            const finalW = Math.max(minW, w);
+            th.style.width = finalW + 'px';
+            th.style.minWidth = finalW + 'px';
+            total += finalW;
+        });
+        table.style.width = total + 'px';
+    }
+
+    if (savedWidths && Array.isArray(savedWidths) && savedWidths.length === ths.length) {
+        applyWidths(savedWidths);
+    } else {
+        applyWidths(defaultWidths);
+    }
+
+    function saveWidths() {
+        const current = Array.from(ths).map(th => Math.round(th.getBoundingClientRect().width));
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(current));
+        } catch (_) {}
+    }
+
+    ths.forEach((th, index) => {
+        // A coluna de seleção (checkbox) permanece fixa em 48px
+        if (index === 0) return;
+        if (th.querySelector('.col-resizer')) return;
+
+        const resizer = document.createElement('div');
+        resizer.className = 'col-resizer';
+        resizer.title = 'Arraste para redimensionar (Duplo clique para redefinir)';
+        th.appendChild(resizer);
+
+        // Previne acionamento de ordenação ao clicar no resizer
+        resizer.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Duplo clique redefine tamanho padrão da coluna
+        resizer.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const defW = defaultWidths[index] || 100;
+            th.style.width = defW + 'px';
+            th.style.minWidth = defW + 'px';
+
+            let total = 0;
+            ths.forEach(t => {
+                total += Math.round(t.getBoundingClientRect().width);
+            });
+            table.style.width = total + 'px';
+            saveWidths();
+        });
+
+        resizer.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const startX = e.clientX;
+            const startWidth = th.getBoundingClientRect().width;
+            const minW = minWidths[index] || 50;
+            const startTableWidth = table.getBoundingClientRect().width;
+
+            resizer.classList.add('is-resizing');
+            document.body.classList.add('table-resizing');
+
+            function onMouseMove(moveEvent) {
+                const deltaX = moveEvent.clientX - startX;
+                const newWidth = Math.max(minW, Math.round(startWidth + deltaX));
+                const actualDelta = newWidth - startWidth;
+
+                th.style.width = newWidth + 'px';
+                th.style.minWidth = newWidth + 'px';
+                table.style.width = Math.round(startTableWidth + actualDelta) + 'px';
+            }
+
+            function onMouseUp() {
+                resizer.classList.remove('is-resizing');
+                document.body.classList.remove('table-resizing');
+                window.removeEventListener('mousemove', onMouseMove, true);
+                window.removeEventListener('mouseup', onMouseUp, true);
+                saveWidths();
+            }
+
+            window.addEventListener('mousemove', onMouseMove, true);
+            window.addEventListener('mouseup', onMouseUp, true);
+        });
+    });
 }
 
 function refreshCurrentInventory(force = true) {
@@ -649,6 +764,7 @@ function renderTable() {
 
     appsTable.classList.remove('hidden');
     emptyState.classList.add('hidden');
+    setupTableColumnResizing();
 
     const fragment = document.createDocumentFragment();
 
@@ -856,9 +972,14 @@ function openBatchConfirmModal() {
         const item = document.createElement('div');
         item.className = 'batch-confirm-item';
 
-        const iconHtml = app.IconBase64
-            ? `<img src="data:image/png;base64,${app.IconBase64}" class="batch-confirm-app-icon" alt="">`
-            : `<div class="app-icon-placeholder" style="width: 28px; height: 28px; font-size: 0.8rem;">${(app.DisplayName || '?')[0].toUpperCase()}</div>`;
+        const iconSrc = (app.IconBase64 && app.IconBase64.startsWith('data:'))
+            ? app.IconBase64
+            : (app.IconBase64 ? `data:image/png;base64,${app.IconBase64}` : null);
+        const initialLetter = (app.DisplayName || '?').trim().charAt(0).toUpperCase();
+
+        const iconHtml = iconSrc
+            ? `<img src="${iconSrc}" class="batch-confirm-app-icon" alt="" onerror="this.outerHTML='<div class=\\'app-icon-placeholder\\' style=\\'width: 28px; height: 28px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; background: #1e293b; border-radius: 4px; font-weight: bold; flex-shrink: 0;\\'>${initialLetter}</div>'">`
+            : `<div class="app-icon-placeholder" style="width: 28px; height: 28px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; background: #1e293b; border-radius: 4px; font-weight: bold; flex-shrink: 0;">${initialLetter}</div>`;
 
         const appSize = (app.EstimatedSizeKb && app.EstimatedSizeKb > 0)
             ? formatSize(app.EstimatedSizeKb * 1024)
