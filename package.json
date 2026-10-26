@@ -1,6 +1,6 @@
 {
   "name": "queu-uninstaller",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Queu Uninstaller - Desinstalador de múltiplos programas em lote & varredura profunda de sobras para Windows",
   "main": "main.js",
   "scripts": {

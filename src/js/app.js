@@ -582,7 +582,8 @@ function applyFiltersAndRender() {
             const nameMatch = (app.DisplayName || '').toLowerCase().includes(term);
             const pubMatch = (app.Publisher || '').toLowerCase().includes(term);
             const idMatch = (app.Id || '').toLowerCase().includes(term);
-            if (!nameMatch && !pubMatch && !idMatch) return false;
+            const commentMatch = (app.Comments || '').toLowerCase().includes(term);
+            if (!nameMatch && !pubMatch && !idMatch && !commentMatch) return false;
         }
 
         // Filtros rápidos

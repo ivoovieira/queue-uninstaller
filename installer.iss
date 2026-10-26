@@ -1,5 +1,5 @@
 #define MyAppName "Queu Uninstaller"
-#define MyAppVersion "1.4.6"
+#define MyAppVersion "1.4.7"
 #define MyAppPublisher "Queu Uninstaller"
 #define MyAppURL "https://github.com/ivoovieira/queue-uninstaller"
 #define MyAppExeName "QueuUninstaller.exe"

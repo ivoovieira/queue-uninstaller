@@ -32,6 +32,33 @@ $appList = foreach ($a in $rawApps) {
         $friendlyName = ($rawName -replace '(?:\.\d+)+$', '')
     }
 
+    # Tenta extrair o DisplayName e PublisherDisplayName reais do AppxManifest.xml
+    $manifestDisplayName = ""
+    $manifestPublisher = ""
+    if ($a.InstallLocation) {
+        $mPath = Join-Path $a.InstallLocation "AppxManifest.xml"
+        if (Test-Path -LiteralPath $mPath) {
+            try {
+                [xml]$mXml = Get-Content -LiteralPath $mPath -Raw -ErrorAction SilentlyContinue
+                $mDisp = $mXml.Package.Properties.DisplayName
+                if (-not $mDisp -or ($mDisp -like "ms-resource:*")) {
+                    $mDisp = $mXml.Package.Applications.Application[0].VisualElements.DisplayName
+                }
+                if ($mDisp -and -not ($mDisp -like "ms-resource:*")) {
+                    $manifestDisplayName = [string]$mDisp
+                }
+                $mPub = $mXml.Package.Properties.PublisherDisplayName
+                if ($mPub) {
+                    $manifestPublisher = [string]$mPub
+                }
+            } catch {}
+        }
+    }
+
+    if ($manifestDisplayName) {
+        $friendlyName = $manifestDisplayName
+    }
+
     [Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = $pct; step = "Examinando $friendlyName ($current de $totalApps)..." } | ConvertTo-Json -Compress))
 
     # Tamanho da pasta
@@ -43,8 +70,14 @@ $appList = foreach ($a in $rawApps) {
         } catch {}
     }
 
-    $pub = [string]($a.Publisher -replace 'CN=|,.*', '')
+    $pub = if ($manifestPublisher) { $manifestPublisher } else { [string]($a.Publisher -replace 'CN=|,.*', '') }
     if (-not $pub) { $pub = "Microsoft Corporation" }
+
+    $comments = if ($rawName -and $rawName -ne $friendlyName) {
+        "Aplicativo da Microsoft Store / Windows ($rawName)"
+    } else {
+        "Aplicativo da Microsoft Store / Windows"
+    }
 
     [PSCustomObject]@{
         Id = [string]$a.PackageFullName
@@ -58,7 +91,7 @@ $appList = foreach ($a in $rawApps) {
         QuietUninstallString = "powershell -NoProfile -Command Remove-AppxPackage -Package $($a.PackageFullName)"
         Architecture = if ($a.Architecture -eq 9) { "64-bit" } else { "32-bit" }
         WebSite = "https://apps.microsoft.com"
-        Comments = "Aplicativo da Microsoft Store / Windows"
+        Comments = $comments
         IconBase64 = ""
         PackageFamilyName = [string]$a.PackageFamilyName
         RegistryPath = ""
