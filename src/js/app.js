@@ -1314,6 +1314,11 @@ async function checkAppUpdates(isManual = false) {
         const res = await window.api.checkForUpdates();
         updateBtnText.textContent = 'Versão do App';
 
+        if (res && res.currentVersion) {
+            const brandVer = document.getElementById('brandVersionLabel') || document.querySelector('.brand-version');
+            if (brandVer) brandVer.textContent = `v${res.currentVersion}`;
+        }
+
         if (res.hasUpdate) {
             if (updateDot) updateDot.classList.remove('hidden');
             const vText = res.remoteVersion || 'Nova versão';
