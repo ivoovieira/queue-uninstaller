@@ -160,11 +160,27 @@ foreach ($item in $data) {
             }
 
             # 3. Excluir item forçadamente
+            $deleted = $false
             try {
                 Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop
                 $removedItems.Add($p)
                 $freedBytes += $size
+                $deleted = $true
             } catch {
+                # Fallback via comando nativo rd /s /q do Windows para pastas de sistema
+                if ($isDir) {
+                    try {
+                        cmd.exe /c "rd /s /q `"$p`"" 2>&1 | Out-Null
+                        if (-not (Test-Path -LiteralPath $p)) {
+                            $removedItems.Add($p)
+                            $freedBytes += $size
+                            $deleted = $true
+                        }
+                    } catch {}
+                }
+            }
+
+            if (-not $deleted) {
                 try {
                     if ($isDir) {
                         [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')

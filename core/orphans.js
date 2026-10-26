@@ -101,11 +101,36 @@ function cleanOrphans(items) {
         });
 
         if (needsElevation) {
-            // Executa com privilégios de Administrador via UAC RunAs para garantir permissão total em Program Files e HKLM
-            const cmd = `Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${scriptPath}\\" -JsonPath \\"${tempJsonFile}\\" -ResultPath \\"${tempResultFile}\\"' -Verb RunAs -Wait`;
+            // Cria script temporário .ps1 para evitar problemas de escape de aspas e caminhos com espaço no -ArgumentList do Start-Process
+            const tempRunnerFile = path.join(os.tmpdir(), `queu_clean_runner_${Date.now()}.ps1`);
+            const runnerScript = `
+$ErrorActionPreference = 'Stop'
+try {
+    & '${scriptPath.replace(/'/g, "''")}' -JsonPath '${tempJsonFile.replace(/'/g, "''")}' -ResultPath '${tempResultFile.replace(/'/g, "''")}'
+    exit 0
+} catch {
+    exit 1
+}
+`;
+            try {
+                fs.writeFileSync(tempRunnerFile, runnerScript, 'utf8');
+            } catch (e) {
+                cleanupTemp();
+                return resolve({
+                    Success: false,
+                    RemovedCount: 0,
+                    RemovedBytes: 0,
+                    RemovedItems: [],
+                    Errors: [`Falha ao criar script runner temporário: ${e.message}`]
+                });
+            }
+
+            const cmd = `Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${tempRunnerFile}"' -Verb RunAs -Wait`;
             const child = spawn('powershell.exe', ['-NoProfile', '-Command', cmd], { windowsHide: true });
 
             child.on('close', (code) => {
+                try { if (fs.existsSync(tempRunnerFile)) fs.unlinkSync(tempRunnerFile); } catch (e) {}
+
                 try {
                     if (fs.existsSync(tempResultFile)) {
                         const raw = fs.readFileSync(tempResultFile, 'utf8');
@@ -137,6 +162,7 @@ function cleanOrphans(items) {
             });
 
             child.on('error', (err) => {
+                try { if (fs.existsSync(tempRunnerFile)) fs.unlinkSync(tempRunnerFile); } catch (e) {}
                 cleanupTemp();
                 resolve({
                     Success: false,
