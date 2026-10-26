@@ -1,5 +1,8 @@
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
+    [string]$JsonPath,
+
+    [Parameter(Mandatory=$false)]
     [string]$ItemsJson,
 
     [Parameter(Mandatory=$false)]
@@ -27,7 +30,18 @@ $forbiddenKeys = @(
     "HKEY_LOCAL_MACHINE\Software\Classes"
 ) | ForEach-Object { $_.ToLower() }
 
-$data = $ItemsJson | ConvertFrom-Json
+$data = $null
+if ($JsonPath -and (Test-Path -LiteralPath $JsonPath)) {
+    try {
+        $raw = Get-Content -LiteralPath $JsonPath -Raw -Encoding UTF8
+        $data = $raw | ConvertFrom-Json
+    } catch {
+        $raw = [System.IO.File]::ReadAllText($JsonPath, [System.Text.Encoding]::UTF8)
+        $data = $raw | ConvertFrom-Json
+    }
+} elseif ($ItemsJson) {
+    $data = $ItemsJson | ConvertFrom-Json
+}
 
 $removedFiles = [System.Collections.Generic.List[string]]::new()
 $removedRegistry = [System.Collections.Generic.List[string]]::new()
@@ -35,20 +49,30 @@ $removedFirewall = [System.Collections.Generic.List[string]]::new()
 $errors = [System.Collections.Generic.List[string]]::new()
 
 function Remove-ResidualFileSystemItem($targetPath) {
-    if (-not (Test-Path $targetPath)) { return $null }
+    if (-not (Test-Path -LiteralPath $targetPath)) { return $null }
 
-    # 1. Se contiver DLLs ou for uma DLL, desregistrar do Explorer via regsvr32
+    # 1. Se contiver DLLs ou for uma DLL, desregistrar com timeout rigoroso (máx 1.5s por DLL) para nunca travar
     $isDir = (Get-Item -LiteralPath $targetPath) -is [System.IO.DirectoryInfo]
     if ($isDir) {
         $dlls = Get-ChildItem -LiteralPath $targetPath -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue
         foreach ($dll in $dlls) {
             try {
-                Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$($dll.FullName)`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+                $proc = Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$($dll.FullName)`"" -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+                if ($proc) {
+                    if (-not $proc.WaitForExit(1500)) {
+                        $proc.Kill()
+                    }
+                }
             } catch {}
         }
     } elseif ($targetPath -like "*.dll") {
         try {
-            Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$targetPath`"" -Wait -NoNewWindow -ErrorAction SilentlyContinue
+            $proc = Start-Process -FilePath "regsvr32.exe" -ArgumentList "/u", "/s", "`"$targetPath`"" -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+            if ($proc) {
+                if (-not $proc.WaitForExit(1500)) {
+                    $proc.Kill()
+                }
+            }
         } catch {}
     }
 
@@ -63,35 +87,24 @@ function Remove-ResidualFileSystemItem($targetPath) {
     } catch {
         # 3. Fallback para exclusão direta
         try {
-            Remove-Item -Path $targetPath -Recurse -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $targetPath -Recurse -Force -ErrorAction Stop
             return "excluído diretamente"
         } catch {
             $firstErr = $_.Exception.Message
-            # 4. Se falhar por bloqueio de arquivo (Explorer lock / Shell extension), reiniciar momentaneamente explorer.exe
+            # 4. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
             try {
-                Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Milliseconds 800
-                Start-Process explorer.exe -ErrorAction SilentlyContinue
-                Start-Sleep -Milliseconds 1000
-
-                Remove-Item -Path $targetPath -Recurse -Force -ErrorAction Stop
-                return "excluído após desbloqueio do Explorer"
-            } catch {
-                # 5. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
-                try {
-                    $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
-                    if (Test-Path $sessionMgr) {
-                        $existing = (Get-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue).PendingFileRenameOperations
-                        $pfrList = [System.Collections.Generic.List[string]]::new()
-                        if ($existing) { $pfrList.AddRange($existing) }
-                        $pfrList.Add("\??\$targetPath")
-                        $pfrList.Add("")
-                        Set-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -Value $pfrList.ToArray() -Type MultiString -Force -ErrorAction SilentlyContinue
-                        return "agendado para exclusão no próximo boot"
-                    }
-                } catch {}
-                throw [System.Exception]::new("Arquivo travado ($firstErr) : $($_.Exception.Message)")
-            }
+                $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
+                if (Test-Path $sessionMgr) {
+                    $existing = (Get-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue).PendingFileRenameOperations
+                    $pfrList = [System.Collections.Generic.List[string]]::new()
+                    if ($existing) { $pfrList.AddRange($existing) }
+                    $pfrList.Add("\??\$targetPath")
+                    $pfrList.Add("")
+                    Set-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -Value $pfrList.ToArray() -Type MultiString -Force -ErrorAction SilentlyContinue
+                    return "agendado para exclusão no próximo boot"
+                }
+            } catch {}
+            throw [System.Exception]::new("Arquivo travado ($firstErr) : $($_.Exception.Message)")
         }
     }
 }

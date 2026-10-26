@@ -295,20 +295,33 @@ async function runBatchQueue(apps, options = {}) {
             notify({ type: 'app-start', index: i, total, app: currentApp });
         }
 
-        const uninstallRes = await runUninstall(currentApp, {
-            silent: options.silentMode !== false
-        });
+        let uninstallRes = null;
+        try {
+            uninstallRes = await runUninstall(currentApp, {
+                silent: options.silentMode !== false
+            });
+        } catch (err) {
+            uninstallRes = { success: false, error: err.message };
+        }
 
         let leftoverRes = null;
         let cleanRes = null;
 
         if (options.scanLeftovers !== false) {
             notify({ type: 'app-scanning', index: i, app: currentApp });
-            leftoverRes = await scanLeftovers(currentApp, options.scanLevel || 'Moderate');
+            try {
+                leftoverRes = await scanLeftovers(currentApp, options.scanLevel || 'Moderate');
+            } catch (err) {
+                leftoverRes = { error: err.message, TotalRegistryCount: 0, TotalFileSystemCount: 0 };
+            }
 
             if (options.autoCleanLeftovers && (leftoverRes.TotalRegistryCount > 0 || leftoverRes.TotalFileSystemCount > 0 || (leftoverRes.TotalFirewallCount && leftoverRes.TotalFirewallCount > 0))) {
                 notify({ type: 'app-cleaning', index: i, app: currentApp });
-                cleanRes = await cleanLeftovers(leftoverRes);
+                try {
+                    cleanRes = await cleanLeftovers(leftoverRes);
+                } catch (err) {
+                    cleanRes = { Success: false, Errors: [err.message] };
+                }
             }
         }
 
