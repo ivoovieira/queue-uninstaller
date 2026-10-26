@@ -324,7 +324,7 @@ foreach ($cHive in $classesHives) {
     if (-not (Test-Path $cHive)) { continue }
     foreach ($term in $searchTerms) {
         # Procurar por chaves que comecem com o termo (ex: discord-*, steam, tg)
-        $protoCandidates = Get-ChildItem -Path $cHive -Filter "$term*" -ErrorAction SilentlyContinue
+        $protoCandidates = Get-ChildItem -Path $cHive -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like "$term*" }
         foreach ($proto in $protoCandidates) {
             $isProtocolOrMatch = $false
             $protoProps = Get-ItemProperty -Path $proto.PSPath -ErrorAction SilentlyContinue

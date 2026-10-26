@@ -972,10 +972,24 @@ function setupBatchListener() {
             if (badge) {
                 const s = data.summary;
                 let text = 'Concluído';
-                if (s.leftovers && s.leftovers.TotalFileSystemCount + s.leftovers.TotalRegistryCount > 0) {
-                    text += ` (${s.leftovers.TotalRegistryCount} reg / ${s.leftovers.TotalFileSystemCount} pastas limpas)`;
+                if (s.cleanResult) {
+                    const regCount = s.cleanResult.RemovedRegistryCount || 0;
+                    const fileCount = s.cleanResult.RemovedFilesCount || 0;
+                    if (regCount + fileCount > 0) {
+                        text += ` (${regCount} reg / ${fileCount} pastas limpas)`;
+                        badge.className = 'status-badge completed';
+                    } else if (s.cleanResult.Errors && s.cleanResult.Errors.length > 0) {
+                        text = 'Aviso na limpeza';
+                        badge.className = 'status-badge warning';
+                    } else {
+                        badge.className = 'status-badge completed';
+                    }
+                } else if (s.leftovers && s.leftovers.TotalFileSystemCount + s.leftovers.TotalRegistryCount > 0) {
+                    text += ` (${s.leftovers.TotalRegistryCount} reg / ${s.leftovers.TotalFileSystemCount} pastas encontradas)`;
+                    badge.className = 'status-badge completed';
+                } else {
+                    badge.className = 'status-badge completed';
                 }
-                badge.className = 'status-badge completed';
                 badge.textContent = text;
             }
         } else if (data.type === 'batch-completed' || data.type === 'batch-cancelled') {

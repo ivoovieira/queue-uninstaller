@@ -6,6 +6,9 @@ param(
     [string]$ItemsJson,
 
     [Parameter(Mandatory=$false)]
+    [string]$ResultPath = "",
+
+    [Parameter(Mandatory=$false)]
     [switch]$UseRecycleBin = $true
 )
 
@@ -76,7 +79,23 @@ function Remove-ResidualFileSystemItem($targetPath) {
         } catch {}
     }
 
-    # 2. Tentar exclusão segura via Lixeira
+    # 2. Tentar exclusão direta forçada
+    try {
+        Remove-Item -LiteralPath $targetPath -Recurse -Force -ErrorAction Stop
+        return "excluído diretamente"
+    } catch {
+        # Fallback via cmd.exe rd /s /q para pastas de sistema (Program Files)
+        if ($isDir) {
+            try {
+                cmd.exe /c "rd /s /q `"$targetPath`"" 2>&1 | Out-Null
+                if (-not (Test-Path -LiteralPath $targetPath)) {
+                    return "excluído diretamente via rd"
+                }
+            } catch {}
+        }
+    }
+
+    # 3. Tentar exclusão segura via Lixeira
     try {
         if ($isDir) {
             [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($targetPath, 'OnlyErrorDialogs', 'SendToRecycleBin')
@@ -85,27 +104,20 @@ function Remove-ResidualFileSystemItem($targetPath) {
         }
         return "enviado à Lixeira"
     } catch {
-        # 3. Fallback para exclusão direta
+        # 4. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
         try {
-            Remove-Item -LiteralPath $targetPath -Recurse -Force -ErrorAction Stop
-            return "excluído diretamente"
-        } catch {
-            $firstErr = $_.Exception.Message
-            # 4. Se ainda estiver travado, agendar exclusão no próximo boot (PendingFileRenameOperations)
-            try {
-                $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
-                if (Test-Path $sessionMgr) {
-                    $existing = (Get-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue).PendingFileRenameOperations
-                    $pfrList = [System.Collections.Generic.List[string]]::new()
-                    if ($existing) { $pfrList.AddRange($existing) }
-                    $pfrList.Add("\??\$targetPath")
-                    $pfrList.Add("")
-                    Set-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -Value $pfrList.ToArray() -Type MultiString -Force -ErrorAction SilentlyContinue
-                    return "agendado para exclusão no próximo boot"
-                }
-            } catch {}
-            throw [System.Exception]::new("Arquivo travado ($firstErr) : $($_.Exception.Message)")
-        }
+            $sessionMgr = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager"
+            if (Test-Path $sessionMgr) {
+                $existing = (Get-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -ErrorAction SilentlyContinue).PendingFileRenameOperations
+                $pfrList = [System.Collections.Generic.List[string]]::new()
+                if ($existing) { $pfrList.AddRange($existing) }
+                $pfrList.Add("\??\$targetPath")
+                $pfrList.Add("")
+                Set-ItemProperty -Path $sessionMgr -Name "PendingFileRenameOperations" -Value $pfrList.ToArray() -Type MultiString -Force -ErrorAction SilentlyContinue
+                return "agendado para exclusão no próximo boot"
+            }
+        } catch {}
+        throw [System.Exception]::new("Arquivo/Pasta protegido ou travado por outro processo")
     }
 }
 
@@ -173,30 +185,44 @@ if ($data.RegistryLeftovers) {
                 continue
             }
 
-            if (Test-Path $psPath) {
+            $cleanKey = ($psPath -replace '^Microsoft\.PowerShell\.Core\\Registry::', '')
+            if (Test-Path -LiteralPath $psPath) {
+                $regDeleted = $false
                 try {
-                    Remove-Item -Path $psPath -Recurse -Force -ErrorAction Stop
+                    Remove-Item -LiteralPath $psPath -Recurse -Force -ErrorAction Stop
                     $removedRegistry.Add($psPath)
+                    $regDeleted = $true
+                } catch {
+                    # Fallback via reg delete nativo
+                    try {
+                        cmd.exe /c "reg delete `"$cleanKey`" /f" 2>&1 | Out-Null
+                        if (-not (Test-Path -LiteralPath $psPath)) {
+                            $removedRegistry.Add($psPath)
+                            $regDeleted = $true
+                        }
+                    } catch {}
+                }
 
+                if (-not $regDeleted) {
+                    $errors.Add("Falha ao remover chave do registro $psPath")
+                } else {
                     # Verificar chave-mãe de fabricante: se ficou com 0 subchaves e 0 valores, remove
                     $parentRegKey = $reg.ParentKey
                     if (-not $parentRegKey) {
                         $parentRegKey = Split-Path -Path $psPath -Parent
                     }
-                    if ($parentRegKey -and (Test-Path $parentRegKey)) {
+                    if ($parentRegKey -and (Test-Path -LiteralPath $parentRegKey)) {
                         $normParentKey = $parentRegKey.ToLower()
                         if (-not ($forbiddenKeys -contains $normParentKey)) {
-                            $parentObj = Get-Item -Path $parentRegKey -ErrorAction SilentlyContinue
+                            $parentObj = Get-Item -LiteralPath $parentRegKey -ErrorAction SilentlyContinue
                             if ($parentObj -and $parentObj.SubKeyCount -eq 0 -and $parentObj.ValueCount -eq 0) {
                                 try {
-                                    Remove-Item -Path $parentRegKey -Force -ErrorAction SilentlyContinue
+                                    Remove-Item -LiteralPath $parentRegKey -Force -ErrorAction SilentlyContinue
                                     $removedRegistry.Add("$parentRegKey (chave de fabricante vazia limpa)")
                                 } catch {}
                             }
                         }
                     }
-                } catch {
-                    $errors.Add("Falha ao remover chave do registro $psPath : $($_.Exception.Message)")
                 }
             }
         }
@@ -218,7 +244,7 @@ if ($data.FirewallRulesLeftovers) {
 }
 
 $output = [PSCustomObject]@{
-    Success = $true
+    Success = ($errors.Count -eq 0 -or ($removedFiles.Count + $removedRegistry.Count + $removedFirewall.Count) -gt 0)
     RemovedFilesCount = $removedFiles.Count
     RemovedRegistryCount = $removedRegistry.Count
     RemovedFirewallCount = $removedFirewall.Count
@@ -228,4 +254,10 @@ $output = [PSCustomObject]@{
     Errors = $errors
 }
 
-$output | ConvertTo-Json -Depth 3 -Compress
+$jsonOutput = $output | ConvertTo-Json -Depth 4 -Compress
+if ($ResultPath) {
+    try {
+        [System.IO.File]::WriteAllText($ResultPath, $jsonOutput, [System.Text.Encoding]::UTF8)
+    } catch {}
+}
+$jsonOutput
