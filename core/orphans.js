@@ -1,7 +1,17 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+
+function isElevated() {
+    if (process.platform !== 'win32') return true;
+    try {
+        execSync('net session', { stdio: 'ignore' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
 function scanOrphans(onProgress) {
     return new Promise((resolve) => {
@@ -65,6 +75,7 @@ function cleanOrphans(items) {
     return new Promise((resolve) => {
         const scriptPath = path.join(__dirname, '..', 'scripts', 'clean_orphaned_residuals.ps1');
         const tempJsonFile = path.join(os.tmpdir(), `queu_clean_orphans_${Date.now()}.json`);
+        const tempResultFile = path.join(os.tmpdir(), `queu_clean_orphans_res_${Date.now()}.json`);
 
         try {
             fs.writeFileSync(tempJsonFile, JSON.stringify(items || []), 'utf8');
@@ -79,11 +90,72 @@ function cleanOrphans(items) {
             });
         }
 
+        const cleanupTemp = () => {
+            try { if (fs.existsSync(tempJsonFile)) fs.unlinkSync(tempJsonFile); } catch (e) {}
+            try { if (fs.existsSync(tempResultFile)) fs.unlinkSync(tempResultFile); } catch (e) {}
+        };
+
+        const needsElevation = !isElevated() && (items || []).some(item => {
+            const p = (item.Path || '').toLowerCase();
+            return p.includes('program files') || p.includes('programdata') || p.includes('hkey_local_machine') || p.includes('hklm');
+        });
+
+        if (needsElevation) {
+            // Executa com privilégios de Administrador via UAC RunAs para garantir permissão total em Program Files e HKLM
+            const cmd = `Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \\"${scriptPath}\\" -JsonPath \\"${tempJsonFile}\\" -ResultPath \\"${tempResultFile}\\"' -Verb RunAs -Wait`;
+            const child = spawn('powershell.exe', ['-NoProfile', '-Command', cmd], { windowsHide: true });
+
+            child.on('close', (code) => {
+                try {
+                    if (fs.existsSync(tempResultFile)) {
+                        const raw = fs.readFileSync(tempResultFile, 'utf8');
+                        cleanupTemp();
+                        const parsed = JSON.parse(raw);
+                        return resolve(parsed);
+                    }
+                } catch (err) {
+                    console.error('Erro ao ler resultado de limpeza elevada de órfãos:', err);
+                }
+                cleanupTemp();
+                if (code !== 0) {
+                    resolve({
+                        Success: false,
+                        RemovedCount: 0,
+                        RemovedBytes: 0,
+                        RemovedItems: [],
+                        Errors: ['Operação de limpeza cancelada ou permissão de Administrador negada no UAC.']
+                    });
+                } else {
+                    resolve({
+                        Success: false,
+                        RemovedCount: 0,
+                        RemovedBytes: 0,
+                        RemovedItems: [],
+                        Errors: ['Falha ao concluir a exclusão de arquivos protegidos.']
+                    });
+                }
+            });
+
+            child.on('error', (err) => {
+                cleanupTemp();
+                resolve({
+                    Success: false,
+                    RemovedCount: 0,
+                    RemovedBytes: 0,
+                    RemovedItems: [],
+                    Errors: [err.message]
+                });
+            });
+            return;
+        }
+
+        // Execução direta padrão se já for Administrador ou se não envolver pastas de sistema
         const child = spawn('powershell.exe', [
             '-NoProfile',
             '-ExecutionPolicy', 'Bypass',
             '-File', scriptPath,
-            '-JsonPath', tempJsonFile
+            '-JsonPath', tempJsonFile,
+            '-ResultPath', tempResultFile
         ], { windowsHide: true });
 
         let stdout = '';
@@ -94,26 +166,38 @@ function cleanOrphans(items) {
 
         child.on('close', (code) => {
             try {
-                if (fs.existsSync(tempJsonFile)) {
-                    fs.unlinkSync(tempJsonFile);
+                if (fs.existsSync(tempResultFile)) {
+                    const raw = fs.readFileSync(tempResultFile, 'utf8');
+                    cleanupTemp();
+                    return resolve(JSON.parse(raw));
                 }
-            } catch (e) {}
-
-            try {
                 const jsonStart = stdout.indexOf('{');
                 if (jsonStart !== -1) {
+                    cleanupTemp();
                     const result = JSON.parse(stdout.substring(jsonStart));
                     return resolve(result);
                 }
             } catch (err) {
                 console.error('Erro no parser de limpeza de órfãos:', err);
             }
+            cleanupTemp();
             resolve({
                 Success: false,
                 RemovedCount: 0,
                 RemovedBytes: 0,
                 RemovedItems: [],
                 Errors: [stderr || 'Falha ao limpar resíduos órfãos']
+            });
+        });
+
+        child.on('error', (err) => {
+            cleanupTemp();
+            resolve({
+                Success: false,
+                RemovedCount: 0,
+                RemovedBytes: 0,
+                RemovedItems: [],
+                Errors: [err.message]
             });
         });
     });

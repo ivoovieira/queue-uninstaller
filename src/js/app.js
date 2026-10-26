@@ -1499,14 +1499,15 @@ async function cleanSelectedOrphans() {
 
     try {
         const result = await window.api.cleanOrphans(selected);
-        if (result.Success) {
+        if (result.Success && result.RemovedCount > 0) {
             const freed = result.RemovedBytes > 0 ? ` (~${formatSize(result.RemovedBytes)} liberados)` : '';
             showToast(`${result.RemovedCount} resíduos limpos com sucesso!${freed}`, 'success');
-
-            // Dispara imediatamente uma nova varredura de resíduos para que a tabela atualize na hora e os itens apagados sumam da tela
+            await runOrphanScan();
+        } else if (result.Errors && result.Errors.length > 0) {
+            showToast(result.Errors[0], 'error');
             await runOrphanScan();
         } else {
-            showToast('Alguns itens não puderam ser removidos.', 'error');
+            showToast('Nenhum resíduo pôde ser removido.', 'warning');
             await runOrphanScan();
         }
     } catch (e) {

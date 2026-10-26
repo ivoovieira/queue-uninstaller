@@ -3,6 +3,9 @@ param(
     [string]$JsonPath,
 
     [Parameter(Mandatory=$false)]
+    [string]$ResultPath,
+
+    [Parameter(Mandatory=$false)]
     [string]$ItemsJson
 )
 
@@ -145,19 +148,30 @@ foreach ($item in $data) {
                 }
             } catch {}
 
+            # 2. Remover atributo ReadOnly recursivamente para evitar bloqueios
+            if ($isDir) {
+                try {
+                    Get-ChildItem -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                        if ($_.Attributes -band [System.IO.FileAttributes]::ReadOnly) {
+                            $_.Attributes = $_.Attributes -bxor [System.IO.FileAttributes]::ReadOnly
+                        }
+                    }
+                } catch {}
+            }
+
+            # 3. Excluir item forçadamente
             try {
-                if ($isDir) {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
-                } else {
-                    [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
-                }
-                $removedItems.Add("$p (enviado à Lixeira)")
+                Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop
+                $removedItems.Add($p)
                 $freedBytes += $size
             } catch {
-                # Fallback para exclusão direta se mover para lixeira falhar
                 try {
-                    Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop
-                    $removedItems.Add($p)
+                    if ($isDir) {
+                        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                    } else {
+                        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                    }
+                    $removedItems.Add("$p (enviado à Lixeira)")
                     $freedBytes += $size
                 } catch {
                     $errors.Add("Erro ao excluir arquivo/pasta $p : $($_.Exception.Message)")
@@ -170,11 +184,17 @@ foreach ($item in $data) {
 }
 
 $output = [PSCustomObject]@{
-    Success = $true
+    Success = ($removedItems.Count -gt 0 -or $errors.Count -eq 0)
     RemovedCount = $removedItems.Count
     RemovedBytes = $freedBytes
     RemovedItems = $removedItems
     Errors = $errors
 }
 
-$output | ConvertTo-Json -Depth 3 -Compress
+$jsonOut = $output | ConvertTo-Json -Depth 3 -Compress
+if ($ResultPath) {
+    try {
+        [System.IO.File]::WriteAllText($ResultPath, $jsonOut, [System.Text.Encoding]::UTF8)
+    } catch {}
+}
+$jsonOut

@@ -18,7 +18,8 @@ $systemWhitelist = @(
     "clients", "registeredapplications", "services", "system", "security", "sam",
     "hardwareresources", "cryptography", "dotnet", "antigravity", "queu", "wow6432node",
     "package cache", "softwaredistribution", "usoprivate", "usoshared", "ssh",
-    "windowsholographicdevices", "whesvc", "regid",
+    "windowsholographicdevices", "whesvc", "regid", "msbuild", "windows workflow foundation",
+    "reference assemblies", "windows kits",
 
     # Drivers, hardware, áudio e periféricos vitais
     "intel", "amd", "ati", "radeon", "catalyst", "adrenalin", "ace", "nvidia", "geforce",
@@ -49,7 +50,7 @@ $ignorePatterns = @(
     # Plataformas Ativas de Jogos
     "epic games", "epicgameslauncher", "valve", "steam", "origin", "ubisoft", "gog.com", "rockstar games", "riot games",
     # Segurança do Windows e Criptografia
-    "windows defender", "microsoft", "cryptography", "credentials"
+    "windows defender", "microsoft", "cryptography", "credentials", "msbuild", "windows workflow foundation"
 )
 
 function Should-IgnoreItem($itemPath, $itemName) {
