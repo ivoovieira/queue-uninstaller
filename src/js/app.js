@@ -1093,7 +1093,15 @@ function setupBatchListener() {
             if (badge) {
                 const s = data.summary;
                 let text = 'Concluído';
-                if (s.cleanResult) {
+
+                // =================================================================
+                // VALIDAÇÃO DE RESULTADO DA DESINSTALAÇÃO
+                // Objetivo: Identificar falha explícita no desinstalador antes de avaliar limpeza
+                // =================================================================
+                if (s.uninstallResult && s.uninstallResult.success === false) {
+                    text = 'Falha no desinstalador';
+                    badge.className = 'status-badge error';
+                } else if (s.cleanResult) {
                     const regCount = s.cleanResult.RemovedRegistryCount || 0;
                     const fileCount = s.cleanResult.RemovedFilesCount || 0;
                     if (regCount + fileCount > 0) {
@@ -1155,6 +1163,18 @@ async function singleUninstall(app) {
 
     showToast(`Iniciando desinstalação de ${app.DisplayName}...`, 'info');
     const res = await window.api.runSingleUninstall(app, { silent: false });
+
+    // =================================================================
+    // VALIDAÇÃO CRÍTICA DE RETORNO DO DESINSTALADOR
+    // Objetivo: Impedir remoção visual prematura caso o desinstalador tenha falhado
+    // =================================================================
+    if (res && res.success === false) {
+        // Nota didática: Se o código de saída ou a execução falhar, manter o app na lista
+        // evita inconsistência de estado entre a interface e o Registro/Catálogo real do Windows.
+        const errorMsg = res.error || res.message || 'O desinstalador encerrou com código de erro.';
+        showToast(`Falha na desinstalação de "${app.DisplayName}": ${errorMsg}`, 'error');
+        return;
+    }
 
     // Remove imediatamente da lista em memória para refletir a nova contagem e tamanho no rodapé
     allApps = allApps.filter(a => a.Id !== app.Id);

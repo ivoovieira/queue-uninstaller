@@ -84,6 +84,22 @@ $appList = foreach ($a in $rawApps) {
         $comments = "WSL, WSL Settings, Linux, Configurações do WSL $comments"
     }
 
+    # =================================================================
+    # CONSTRUÇÃO DO COMANDO DE DESINSTALAÇÃO DO APPX/MSIX
+    # Objetivo: Gerar comando resiliente de remoção para todos os usuários e usuário atual
+    # Entrada: $a.PackageFullName (string identificadora completa do pacote)
+    # Retorno: String contendo comando PowerShell completo com tratamento de erros
+    # =================================================================
+
+    # -----------------------------------------------------------------
+    # 1. TRATAMENTO DE CARACTERES E DEFINIÇÃO DO COMANDO
+    # -----------------------------------------------------------------
+    # Nota didática: O uso de -AllUsers requer privilégios elevados. Caso falhe
+    # (ou o usuário não seja admin irrestrito), o fallback para o usuário atual
+    # garante a remoção local sem abortar silenciosamente.
+    $escapedPkg = ($a.PackageFullName -replace '"', '`"')
+    $appxCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command `"try { Remove-AppxPackage -Package '$escapedPkg' -AllUsers -ErrorAction Stop } catch { try { Remove-AppxPackage -Package '$escapedPkg' -ErrorAction Stop } catch { exit 1 } }; try { Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { `$_.PackageName -eq '$escapedPkg' } | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue } catch {}`""
+
     [PSCustomObject]@{
         Id = [string]$a.PackageFullName
         DisplayName = $friendlyName
@@ -92,8 +108,8 @@ $appList = foreach ($a in $rawApps) {
         InstallDate = ""
         EstimatedSizeKb = $sizeKb
         InstallLocation = [string]$a.InstallLocation
-        UninstallString = "powershell -NoProfile -Command Remove-AppxPackage -Package $($a.PackageFullName)"
-        QuietUninstallString = "powershell -NoProfile -Command Remove-AppxPackage -Package $($a.PackageFullName)"
+        UninstallString = $appxCmd
+        QuietUninstallString = $appxCmd
         Architecture = if ($a.Architecture -eq 9) { "64-bit" } else { "32-bit" }
         WebSite = "https://apps.microsoft.com"
         Comments = $comments
