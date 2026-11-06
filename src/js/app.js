@@ -1532,6 +1532,9 @@ function formatCleanOrphanPath(rawPath) {
 function getOrphanTypeIcon(item) {
     const p = (item.Path || '').toLowerCase();
     const t = (item.Type || '').toLowerCase();
+    if (t === 'orphanprocess') {
+        return { icon: '⚙️', title: 'Processo Órfão em Execução (Memória RAM)' };
+    }
     if (t === 'apppath' || p.includes('app paths') || p.endsWith('.exe')) {
         return { icon: '⚡', title: 'Caminho de Executável (App Paths)' };
     }

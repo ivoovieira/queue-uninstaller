@@ -75,6 +75,34 @@ foreach ($item in $data) {
     if (-not $p) { continue }
     $type = $item.Type
 
+    # ---------------------------------------------------------------
+    # TRATAMENTO DE PROCESSOS ÓRFÃOS / FANTASMAS EM MEMÓRIA
+    # ---------------------------------------------------------------
+    # Nota didática: O encerramento de processos órfãos via taskkill /F /T
+    # garante que o processo raiz e toda a sua árvore de subprocessos (incluindo
+    # sessões desconectadas de outros usuários) sejam eliminados e a memória liberada.
+    if ($type -eq "OrphanProcess") {
+        $procId = [int]$item.ProcessId
+        $procName = [string]$item.ProcessName
+        if (-not $procName -and $item.Name -match '^([^\s]+)') {
+            $procName = $Matches[1]
+        }
+
+        try {
+            if ($procId -gt 0) {
+                & taskkill /f /t /pid $procId 2>$null | Out-Null
+            }
+            if ($procName) {
+                & taskkill /f /t /im $procName 2>$null | Out-Null
+            }
+            $removedItems.Add("Processo órfão finalizado: $procName (PID $procId)")
+            $freedBytes += [int64]$item.SizeBytes
+        } catch {
+            $errors.Add("Falha ao encerrar processo órfão $procName : $($_.Exception.Message)")
+        }
+        continue
+    }
+
     if ($type -eq "RegistryAppPath" -or $type -eq "RegistryKey") {
         # Limpeza de Registro
         $targetReg = $p

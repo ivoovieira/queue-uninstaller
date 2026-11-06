@@ -568,6 +568,89 @@ foreach ($adRoot in $appDataRoots) {
     }
 }
 
+[Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 95; step = "Varrendo processos órfãos em execução na memória..." } | ConvertTo-Json -Compress))
+
+# ==============================================================================
+# 7. Varrer Processos Órfãos em Execução (🟡 Atenção - Requer Revisão)
+# ==============================================================================
+# Nota didática: Softwares desinstalados (como ChatGPT, mensageiros ou utilitários)
+# podem deixar processos zumbis ativos em sessões em segundo plano ou desconectadas,
+# consumindo memória RAM e impedindo a exclusão de arquivos residuais.
+$allProcs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+
+$protectedExesSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(
+    "explorer.exe", "svchost.exe", "powershell.exe", "pwsh.exe", "cmd.exe",
+    "node.exe", "electron.exe", "queuuninstaller.exe", "system", "idle",
+    "services.exe", "lsass.exe", "csrss.exe", "smss.exe", "wininit.exe",
+    "winlogon.exe", "spoolsv.exe", "taskhostw.exe", "dwm.exe", "sihost.exe",
+    "ctfmon.exe", "conhost.exe", "runtimebroker.exe", "applicationframehost.exe",
+    "startmenuexperiencehost.exe", "searchhost.exe", "shellexperiencehost.exe",
+    "antigravity.exe", "antigravity ide.exe"
+) | ForEach-Object { $protectedExesSet.Add($_) | Out-Null }
+
+$seenProcessPids = [System.Collections.Generic.HashSet[int]]::new()
+
+foreach ($proc in $allProcs) {
+    $pName = [string]$proc.Name
+    if (-not $pName -or $protectedExesSet.Contains($pName)) { continue }
+    if ($seenProcessPids.Contains($proc.ProcessId)) { continue }
+    $seenProcessPids.Add($proc.ProcessId) | Out-Null
+
+    $cleanPName = ($pName -replace '\.exe$', '').ToLower()
+    if (Is-SystemWhitelisted $cleanPName) { continue }
+
+    $pPath = [string]$proc.ExecutablePath
+    $isOrphanProc = $false
+    $orphanProcReason = ""
+
+    # Critério A: Executável em pasta WindowsApps de pacote desinstalado
+    if ($pPath -and $pPath -match 'WindowsApps\\([^\\]+)') {
+        $pkgDir = $Matches[1]
+        if (-not ($installedTokens.Contains($pkgDir) -or $installedTokens.Contains($cleanPName))) {
+            $isOrphanProc = $true
+            $orphanProcReason = "Processo ativo de pacote WindowsApps não mais instalado no catálogo"
+        }
+    }
+    # Critério B: Executável em AppData de programa não mais instalado
+    elseif ($pPath -and $pPath -match 'AppData\\(Local|Roaming)\\([^\\]+)') {
+        $vendorOrApp = $Matches[2].ToLower()
+        if (-not (Is-SystemWhitelisted $vendorOrApp) -and -not ($installedTokens.Contains($vendorOrApp) -or $installedTokens.Contains($cleanPName))) {
+            $isOrphanProc = $true
+            $orphanProcReason = "Processo ativo em AppData de software não listado como instalado"
+        }
+    }
+    # Critério C: Softwares conhecidos desinstalados mantendo processos zumbis (ex: chatgpt, codex-command-runner)
+    if (-not $isOrphanProc) {
+        if ($cleanPName -match '^(chatgpt|codex|openai)' -and -not ($installedTokens.Contains('chatgpt') -or $installedTokens.Contains('codex') -or $installedTokens.Contains('openai'))) {
+            $isOrphanProc = $true
+            $orphanProcReason = "Processo residual órfão de aplicativo OpenAI/ChatGPT não mais instalado no sistema"
+        }
+    }
+
+    if ($isOrphanProc) {
+        $memBytes = [int64]0
+        try {
+            $pObj = Get-Process -Id $proc.ProcessId -ErrorAction SilentlyContinue
+            if ($pObj) { $memBytes = [int64]$pObj.WorkingSet64 }
+        } catch {}
+
+        $foundItems.Add([PSCustomObject]@{
+            Id = "orphan_$itemIdCounter"
+            Name = "$pName (PID $($proc.ProcessId))"
+            Path = if ($pPath) { $pPath } else { $pName }
+            ProcessId = $proc.ProcessId
+            ProcessName = $pName
+            Type = "OrphanProcess"
+            Risk = "Review"
+            Reason = "$orphanProcReason"
+            SizeBytes = $memBytes
+            Selected = $true
+        })
+        $itemIdCounter++
+    }
+}
+
 [Console]::Error.WriteLine('[PROGRESS]' + (@{ pct = 100; step = "Varredura de resíduos concluída!" } | ConvertTo-Json -Compress))
 
 $safeItems = $foundItems | Where-Object { $_.Risk -eq "Safe" }

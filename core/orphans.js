@@ -97,7 +97,8 @@ function cleanOrphans(items) {
 
         const needsElevation = !isElevated() && (items || []).some(item => {
             const p = (item.Path || '').toLowerCase();
-            return p.includes('program files') || p.includes('programdata') || p.includes('hkey_local_machine') || p.includes('hklm');
+            const t = (item.Type || '').toLowerCase();
+            return t === 'orphanprocess' || p.includes('program files') || p.includes('programdata') || p.includes('hkey_local_machine') || p.includes('hklm');
         });
 
         if (needsElevation) {

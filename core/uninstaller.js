@@ -50,7 +50,9 @@ function killActiveLocks(app) {
             '-File', scriptPath,
             '-InstallLocation', cleanLocation,
             '-DisplayName', app.DisplayName || '',
-            '-UninstallString', app.UninstallString || ''
+            '-UninstallString', app.UninstallString || '',
+            '-PackageFullName', app.Id || app.PackageFullName || '',
+            '-PackageFamilyName', app.PackageFamilyName || ''
         ], { windowsHide: true });
 
         let stdout = '';
